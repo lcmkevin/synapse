@@ -1,0 +1,13 @@
+{
+  "name": "trae-template-deployer",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Deploy Trae Template into projects (copy or symlink) with status and sync.",
+  "license": "MIT",
+  "bin": {
+    "trae-template": "bin/trae-template.js"
+  },
+  "engines": {
+    "node": ">=16.17.0"
+  }
+}
