@@ -13,4 +13,5 @@ Usage examples
 
 
 Precautions
-Please be reminded to ignore
+Please be reminded to ignore your rules in gitignore if you do not want to disclose it.
+
