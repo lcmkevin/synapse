@@ -5,11 +5,16 @@ const fs = require("fs");
 const fsp = fs.promises;
 const path = require("path");
 const crypto = require("crypto");
+const readline = require("readline");
+const childProcess = require("child_process");
+const os = require("os");
+const core = require("../src/core");
 
 const TOOL_NAME = "trae-template";
 const DEFAULT_TEMPLATE_ROOT = path.resolve(__dirname, "..", "Template");
 const DEFAULT_TEMPLATE_SUBPATH = ".trae";
 const DEFAULT_STATE_FILE = path.posix.join(".trae", ".deployer.json");
+const DEFAULT_GITIGNORE_ENTRY = ".trae/";
 
 function toPosixPath(p) {
   return p.split(path.sep).join(path.posix.sep);
@@ -36,6 +41,10 @@ function formatBackupSuffix(d) {
   return d.toISOString().replace(/[-:]/g, "").replace(/\..+$/, "").replace("T", "_");
 }
 
+function isTty() {
+  return !!process.stdout.isTTY && !!process.stdin.isTTY;
+}
+
 async function exists(p) {
   try {
     await fsp.lstat(p);
@@ -60,6 +69,79 @@ async function writeJson(p, value) {
   await fsp.writeFile(p, JSON.stringify(value, null, 2) + "\n", "utf8");
 }
 
+function createLogger({ quiet, verbose, logFile }) {
+  const level = quiet ? 0 : verbose ? 2 : 1;
+
+  function writeLine(stream, msg) {
+    stream.write(String(msg) + "\n");
+  }
+
+  async function appendLog(line) {
+    if (!logFile) return;
+    try {
+      await ensureDir(path.dirname(logFile));
+      await fsp.appendFile(logFile, line + "\n", "utf8");
+    } catch {
+      // ignore
+    }
+  }
+
+  function formatLine(kind, msg) {
+    const ts = new Date().toISOString();
+    return `[${ts}] ${kind.toUpperCase()}: ${msg}`;
+  }
+
+  return {
+    info(msg) {
+      if (level >= 1) writeLine(process.stdout, msg);
+      void appendLog(formatLine("info", msg));
+    },
+    warn(msg) {
+      if (level >= 1) writeLine(process.stderr, msg);
+      void appendLog(formatLine("warn", msg));
+    },
+    error(msg) {
+      writeLine(process.stderr, msg);
+      void appendLog(formatLine("error", msg));
+    },
+    debug(msg) {
+      if (level >= 2) writeLine(process.stdout, msg);
+      void appendLog(formatLine("debug", msg));
+    },
+    isQuiet: level === 0,
+    isVerbose: level >= 2,
+  };
+}
+
+function createProgress(total, logger) {
+  if (!isTty() || logger.isVerbose || logger.isQuiet) {
+    return {
+      tick() {},
+      end() {},
+    };
+  }
+
+  let current = 0;
+  let lastLen = 0;
+  function render(msg) {
+    const prefix = `[${current}/${total}] `;
+    const line = prefix + msg;
+    const pad = lastLen > line.length ? " ".repeat(lastLen - line.length) : "";
+    process.stdout.write("\r" + line + pad);
+    lastLen = line.length;
+  }
+
+  return {
+    tick(msg) {
+      current++;
+      render(msg);
+    },
+    end() {
+      if (lastLen) process.stdout.write("\n");
+    },
+  };
+}
+
 function parseArgs(argv) {
   const args = argv.slice(2);
   const cmd = args[0] && !args[0].startsWith("-") ? args[0] : "help";
@@ -68,7 +150,13 @@ function parseArgs(argv) {
   const positionals = [];
   for (let i = cmd === "help" ? 0 : 1; i < args.length; i++) {
     const a = args[i];
-    if (a.startsWith("--")) {
+    if (a === "-h") {
+      flags.help = true;
+    } else if (a === "-v") {
+      flags.verbose = true;
+    } else if (a === "-q") {
+      flags.quiet = true;
+    } else if (a.startsWith("--")) {
       const [k, v] = a.slice(2).split("=");
       if (v === undefined) {
         flags[k] = true;
@@ -89,9 +177,12 @@ function printHelp() {
       `${t} - deploy Trae Template (.trae) into a project`,
       "",
       "Usage:",
-      `  ${t} init [projectPath] [--copy|--symlink] [--force] [--backup] [--dry-run] [--template-root=PATH]`,
+      `  ${t} init [projectPath] [--copy|--symlink] [--force] [--backup] [--dry-run] [--template-root=PATH] [--interactive]`,
       `  ${t} status [projectPath] [--template-root=PATH]`,
       `  ${t} sync [projectPath] [--force] [--backup] [--dry-run] [--template-root=PATH]`,
+      `  ${t} gitignore [projectPath] [--dry-run]`,
+      `  ${t} dashboard [--port=5177]`,
+      `  ${t} doctor`,
       "",
       "Notes:",
       `  - Default template root: ${DEFAULT_TEMPLATE_ROOT}`,
@@ -99,8 +190,65 @@ function printHelp() {
       `  - State file stored at: ${DEFAULT_STATE_FILE} in the target project`,
       "  - If you don't want to disclose your rules, add .trae/ to your project's .gitignore",
       "",
+      "Common flags:",
+      "  -v, --verbose           Show per-file actions",
+      "  -q, --quiet             Only show errors",
+      "  --log-file=PATH         Append logs to a file",
+      "",
     ].join("\n")
   );
+}
+
+function compareVersions(a, b) {
+  const pa = String(a).split(".").map((n) => Number(n));
+  const pb = String(b).split(".").map((n) => Number(n));
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const da = pa[i] || 0;
+    const db = pb[i] || 0;
+    if (da > db) return 1;
+    if (da < db) return -1;
+  }
+  return 0;
+}
+
+async function doctorCommand({ templateRoot, logger }) {
+  const issues = [];
+
+  const nodeVer = process.versions.node || "";
+  const minNode = "16.17.0";
+  if (compareVersions(nodeVer, minNode) < 0) {
+    issues.push(`Node.js ${minNode}+ required (current: ${nodeVer})`);
+  }
+
+  const templateTrae = path.join(templateRoot, DEFAULT_TEMPLATE_SUBPATH);
+  if (!(await exists(templateTrae))) {
+    issues.push(`Template folder not found: ${templateTrae}`);
+  }
+
+  const tempDir = await fsp.mkdtemp(path.join(os.tmpdir(), "trae-rule-"));
+  const src = path.join(tempDir, "src.txt");
+  const dest = path.join(tempDir, "dest.txt");
+  await fsp.writeFile(src, "test", "utf8");
+  let symlinkOk = true;
+  try {
+    await fsp.symlink(src, dest, "file");
+  } catch {
+    symlinkOk = false;
+  }
+  await fsp.rm(tempDir, { recursive: true, force: true });
+
+  logger.info(`Node: ${nodeVer}`);
+  logger.info(`Template root: ${templateRoot}`);
+  logger.info(`Symlink capability: ${symlinkOk ? "OK" : "NOT AVAILABLE"} (copy mode still works)`);
+  logger.info("");
+
+  if (issues.length) {
+    logger.error("Issues:");
+    for (const i of issues) logger.error(`- ${i}`);
+    process.exitCode = 2;
+  } else {
+    logger.info("OK");
+  }
 }
 
 async function listFilesRecursively(rootDir) {
@@ -117,6 +265,7 @@ async function listFilesRecursively(rootDir) {
     }
   }
   await walk(rootDir);
+  results.sort();
   return results;
 }
 
@@ -186,6 +335,22 @@ function getMode(flags) {
   return "symlink";
 }
 
+async function promptLine(question, defaultValue) {
+  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+  const q = defaultValue ? `${question} (${defaultValue}): ` : `${question}: `;
+  const answer = await new Promise((resolve) => rl.question(q, (val) => resolve(val)));
+  rl.close();
+  const trimmed = String(answer).trim();
+  return trimmed.length ? trimmed : defaultValue;
+}
+
+async function promptChoice(question, choices, defaultValue) {
+  const choiceText = choices.map((c) => (c === defaultValue ? `${c}*` : c)).join(", ");
+  const ans = await promptLine(`${question} [${choiceText}]`, defaultValue);
+  if (choices.includes(ans)) return ans;
+  return defaultValue;
+}
+
 async function computePlan({ templateRoot, targetRoot }) {
   const templateTraeDir = path.join(templateRoot, DEFAULT_TEMPLATE_SUBPATH);
   if (!(await exists(templateTraeDir))) {
@@ -206,284 +371,145 @@ async function computePlan({ templateRoot, targetRoot }) {
   return { templateTraeDir, plan };
 }
 
-async function initCommand({ templateRoot, targetRoot, mode, force, backup, dryRun }) {
-  const { plan } = await computePlan({ templateRoot, targetRoot });
-
-  const applied = [];
-  const skipped = [];
-  let effectiveMode = mode;
-
-  for (const item of plan) {
-    const destExists = await exists(item.dest);
-    if (destExists && !force) {
-      skipped.push({ ...item, reason: "exists" });
-      continue;
-    }
-
-    const templateHashAtDeploy = await fileHash(item.src);
-
-    if (dryRun) {
-      applied.push({ ...item, action: effectiveMode, templateHashAtDeploy, targetHashAtDeploy: null, linkTarget: null });
-      continue;
-    }
-
-    if (destExists && force && backup) {
-      await backupExisting(item.dest);
-    }
-
-    if (effectiveMode === "symlink") {
-      try {
-        await trySymlinkFile(item.src, item.dest);
-        applied.push({
-          ...item,
-          action: "symlink",
-          templateHashAtDeploy,
-          targetHashAtDeploy: null,
-          linkTarget: item.src,
-        });
-      } catch (e) {
-        effectiveMode = "copy";
-        await copyFileWithDirs(item.src, item.dest);
-        const targetHashAtDeploy = await fileHash(item.dest);
-        applied.push({
-          ...item,
-          action: "copy",
-          note: "symlink_failed_fallback_to_copy",
-          templateHashAtDeploy,
-          targetHashAtDeploy,
-          linkTarget: null,
-        });
-      }
+async function initCommand({ templateRoot, targetRoot, mode, force, backup, dryRun, logger }) {
+  if (!(await exists(targetRoot))) {
+    if (!dryRun) {
+      await ensureDir(targetRoot);
     } else {
-      await copyFileWithDirs(item.src, item.dest);
-      const targetHashAtDeploy = await fileHash(item.dest);
-      applied.push({
-        ...item,
-        action: "copy",
-        templateHashAtDeploy,
-        targetHashAtDeploy,
-        linkTarget: null,
-      });
+      logger.warn(`Target folder does not exist (dry-run): ${targetRoot}`);
     }
   }
 
-  const state = {
-    tool: TOOL_NAME,
+  const { plan } = await core.computePlan({ templateRoot, targetRoot, templateSubPath: DEFAULT_TEMPLATE_SUBPATH });
+  const progress = createProgress(plan.length, logger);
+
+  const result = await core.initDeploy({
+    toolName: TOOL_NAME,
     version: "0.1.0",
-    templateRoot: templateRoot,
+    templateRoot,
+    targetRoot,
+    mode,
+    force,
+    backup,
+    dryRun,
     templateSubPath: DEFAULT_TEMPLATE_SUBPATH,
-    deployedAt: new Date().toISOString(),
-    requestedMode: mode,
-    mode: effectiveMode,
-    files: applied.map((a) => ({
-      path: a.relPosix,
-      action: a.action,
-      templateHashAtDeploy: a.templateHashAtDeploy,
-      targetHashAtDeploy: a.targetHashAtDeploy,
-      linkTarget: a.linkTarget,
-      note: a.note || null,
-    })),
-  };
+    onProgress: (e) => {
+      if (e.type === "skip") progress.tick(`skip ${e.relPosix}`);
+      else if (e.type === "dryrun") progress.tick(`${e.action} ${e.relPosix}`);
+      else if (e.type === "apply") progress.tick(`${e.action} ${e.relPosix}`);
+      else progress.tick(`${e.type} ${e.relPosix}`);
+    },
+  });
+  progress.end();
 
-  if (!dryRun) {
-    await safeWriteState(targetRoot, state);
+  logger.info(`Target: ${result.targetRoot}`);
+  logger.info(`Template: ${result.templateRoot}`);
+  logger.info(`Mode: ${result.requestedMode}${result.effectiveMode !== result.requestedMode ? ` (effective: ${result.effectiveMode})` : ""}`);
+  logger.info(`Applied: ${result.applied.length}`);
+  logger.info(`Skipped: ${result.skipped.length}${force ? "" : " (use --force to overwrite)"}`);
+  logger.info(result.dryRun ? "Dry-run: no files written." : `State: ${result.stateFile}`);
+  if (logger.isVerbose) {
+    for (const a of result.applied) logger.debug(`APPLY ${a.action.toUpperCase()} ${a.path}${a.note ? ` (${a.note})` : ""}`);
+    for (const s of result.skipped) logger.debug(`SKIP ${s.path} (${s.reason})`);
   }
-
-  process.stdout.write(
-    [
-      `Target: ${targetRoot}`,
-      `Template: ${templateRoot}`,
-      `Mode: ${mode}${effectiveMode !== mode ? ` (effective: ${effectiveMode})` : ""}`,
-      `Applied: ${applied.length}`,
-      `Skipped: ${skipped.length}${force ? "" : " (use --force to overwrite)"}`,
-      dryRun ? "Dry-run: no files written." : `State: ${DEFAULT_STATE_FILE}`,
-      "",
-    ].join("\n")
-  );
+  logger.info("");
 }
 
-async function statusCommand({ templateRoot, targetRoot }) {
-  const { plan } = await computePlan({ templateRoot, targetRoot });
+async function statusCommand({ templateRoot, targetRoot, logger }) {
+  const { plan } = await core.computePlan({ templateRoot, targetRoot, templateSubPath: DEFAULT_TEMPLATE_SUBPATH });
+  const progress = createProgress(plan.length, logger);
 
-  const missing = [];
-  const different = [];
-  const same = [];
+  const result = await core.statusCheck({
+    templateRoot,
+    targetRoot,
+    templateSubPath: DEFAULT_TEMPLATE_SUBPATH,
+    onProgress: (e) => {
+      if (e.type === "missing") progress.tick(`missing ${e.relPosix}`);
+      else if (e.type === "link") progress.tick(`link ${e.relPosix}`);
+      else progress.tick(`check ${e.relPosix}`);
+    },
+  });
+  progress.end();
 
-  for (const item of plan) {
-    if (!(await exists(item.dest))) {
-      missing.push(item.relPosix);
-      continue;
-    }
-
-    const st = await fsp.lstat(item.dest);
-    if (st.isSymbolicLink()) {
-      let ok = false;
-      try {
-        const link = await fsp.readlink(item.dest);
-        const resolved = path.resolve(path.dirname(item.dest), link);
-        ok = path.resolve(resolved) === path.resolve(item.src);
-      } catch {
-        ok = false;
-      }
-      if (ok) same.push(item.relPosix);
-      else different.push(item.relPosix);
-      continue;
-    }
-
-    const [srcHash, destHash] = await Promise.all([fileHash(item.src), fileHash(item.dest)]);
-    if (srcHash !== destHash) different.push(item.relPosix);
-    else same.push(item.relPosix);
+  logger.info(`Target: ${targetRoot}`);
+  logger.info(`Template: ${templateRoot}`);
+  logger.info("");
+  logger.info(`Same: ${result.same.length}`);
+  logger.info(`Different: ${result.different.length}`);
+  logger.info(`Missing: ${result.missing.length}`);
+  logger.info("");
+  if (result.different.length) {
+    logger.info("Different:");
+    for (const p of result.different) logger.info(`  - ${p}`);
+    logger.info("");
+  }
+  if (result.missing.length) {
+    logger.info("Missing:");
+    for (const p of result.missing) logger.info(`  - ${p}`);
+    logger.info("");
   }
 
-  process.stdout.write(`Target: ${targetRoot}\nTemplate: ${templateRoot}\n\n`);
-  process.stdout.write(`Same: ${same.length}\nDifferent: ${different.length}\nMissing: ${missing.length}\n\n`);
-  if (different.length) {
-    process.stdout.write("Different:\n");
-    for (const p of different) process.stdout.write(`  - ${p}\n`);
-    process.stdout.write("\n");
-  }
-  if (missing.length) {
-    process.stdout.write("Missing:\n");
-    for (const p of missing) process.stdout.write(`  - ${p}\n`);
-    process.stdout.write("\n");
-  }
-
-  if (missing.length || different.length) {
+  if (result.missing.length || result.different.length) {
     process.exitCode = 2;
   }
 }
 
-async function syncCommand({ templateRoot, targetRoot, force, backup, dryRun }) {
-  const state = await loadState(targetRoot);
-  if (!state) {
-    throw new Error(`No state file found at ${DEFAULT_STATE_FILE}. Run "${TOOL_NAME} init" first.`);
-  }
-  if (state.mode !== "copy") {
-    process.stdout.write(`Mode is "${state.mode}". Sync only applies to copy deployments.\n`);
+async function syncCommand({ templateRoot, targetRoot, force, backup, dryRun, logger }) {
+  const { plan } = await core.computePlan({ templateRoot, targetRoot, templateSubPath: DEFAULT_TEMPLATE_SUBPATH });
+  const progress = createProgress(plan.length, logger);
+  const result = await core.syncCopy({
+    templateRoot,
+    targetRoot,
+    force,
+    backup,
+    dryRun,
+    templateSubPath: DEFAULT_TEMPLATE_SUBPATH,
+    onProgress: (e) => {
+      if (e.type === "conflict") progress.tick(`conflict ${e.relPosix}`);
+      else if (e.type === "add") progress.tick(`add ${e.relPosix}`);
+      else if (e.type === "replace") progress.tick(`replace ${e.relPosix}`);
+      else if (e.type === "update") progress.tick(`update ${e.relPosix}`);
+      else progress.tick(`skip ${e.relPosix}`);
+    },
+  });
+  progress.end();
+
+  if (result.mode && result.mode !== "copy") {
+    logger.info(`Mode is "${result.mode}". Sync only applies to copy deployments.`);
     return;
   }
 
-  const { plan } = await computePlan({ templateRoot, targetRoot });
-  const stateByPath = new Map();
-  if (Array.isArray(state.files)) {
-    for (const f of state.files) {
-      if (f && typeof f.path === "string") stateByPath.set(f.path, f);
-    }
-  }
-  const updated = [];
-  const skipped = [];
-  const conflicts = [];
+  logger.info(`Target: ${targetRoot}`);
+  logger.info(`Template: ${templateRoot}`);
+  logger.info(`Updated: ${result.updated.length}`);
+  logger.info(`Skipped: ${result.skipped.length}`);
+  logger.info(`Conflicts: ${result.conflicts.length}${result.conflicts.length ? " (use --force to overwrite)" : ""}`);
+  logger.info(result.dryRun ? "Dry-run: no files written." : `State: ${result.stateFile}`);
+  logger.info("");
 
-  for (const item of plan) {
-    const destExists = await exists(item.dest);
-    const templateHash = await fileHash(item.src);
-    const prior = stateByPath.get(item.relPosix);
-
-    if (!destExists) {
-      if (!dryRun) {
-        await copyFileWithDirs(item.src, item.dest);
-      }
-      updated.push(item.relPosix);
-      if (!dryRun) {
-        const targetHash = await fileHash(item.dest);
-        stateByPath.set(item.relPosix, {
-          path: item.relPosix,
-          action: "copy",
-          templateHashAtDeploy: templateHash,
-          targetHashAtDeploy: targetHash,
-          linkTarget: null,
-          note: prior && prior.note ? prior.note : null,
-        });
-      }
-      continue;
-    }
-
-    const st = await fsp.lstat(item.dest);
-    if (st.isSymbolicLink()) {
-      if (!force) {
-        conflicts.push(item.relPosix);
-        continue;
-      }
-      if (!dryRun) {
-        if (backup) {
-          await backupExisting(item.dest);
-        } else {
-          await fsp.unlink(item.dest);
-        }
-        await copyFileWithDirs(item.src, item.dest);
-      }
-      updated.push(item.relPosix);
-      if (!dryRun) {
-        const targetHash = await fileHash(item.dest);
-        stateByPath.set(item.relPosix, {
-          path: item.relPosix,
-          action: "copy",
-          templateHashAtDeploy: templateHash,
-          targetHashAtDeploy: targetHash,
-          linkTarget: null,
-          note: "replaced_symlink_with_copy",
-        });
-      }
-      continue;
-    }
-
-    const destHash = await fileHash(item.dest);
-    if (destHash === templateHash) {
-      skipped.push(item.relPosix);
-      continue;
-    }
-
-    const modifiedByUser = prior && typeof prior.targetHashAtDeploy === "string" && prior.targetHashAtDeploy !== destHash;
-    if (modifiedByUser && !force) {
-      conflicts.push(item.relPosix);
-      continue;
-    }
-
-    if (!dryRun) {
-      if (backup && destExists) {
-        await backupExisting(item.dest);
-      }
-      await copyFileWithDirs(item.src, item.dest);
-    }
-    updated.push(item.relPosix);
-    if (!dryRun) {
-      const targetHash = await fileHash(item.dest);
-      stateByPath.set(item.relPosix, {
-        path: item.relPosix,
-        action: "copy",
-        templateHashAtDeploy: templateHash,
-        targetHashAtDeploy: targetHash,
-        linkTarget: null,
-        note: null,
-      });
-    }
-  }
-
-  if (!dryRun) {
-    state.deployedAt = new Date().toISOString();
-    state.templateRoot = templateRoot;
-    state.files = Array.from(stateByPath.values()).sort((a, b) => a.path.localeCompare(b.path));
-    await safeWriteState(targetRoot, state);
-  }
-
-  process.stdout.write(
-    [
-      `Target: ${targetRoot}`,
-      `Template: ${templateRoot}`,
-      `Updated: ${updated.length}`,
-      `Skipped: ${skipped.length}`,
-      `Conflicts: ${conflicts.length}${conflicts.length ? " (use --force to overwrite)" : ""}`,
-      dryRun ? "Dry-run: no files written." : `State: ${DEFAULT_STATE_FILE}`,
-      "",
-    ].join("\n")
-  );
-
-  if (conflicts.length) {
-    process.stdout.write("Conflicts:\n");
-    for (const p of conflicts) process.stdout.write(`  - ${p}\n`);
-    process.stdout.write("\n");
+  if (result.conflicts.length) {
+    logger.info("Conflicts:");
+    for (const p of result.conflicts) logger.info(`  - ${p}`);
+    logger.info("");
     process.exitCode = 2;
   }
+}
+
+async function gitignoreCommand({ targetRoot, dryRun, logger }) {
+  if (!(await exists(targetRoot))) {
+    if (!dryRun) {
+      await ensureDir(targetRoot);
+    } else {
+      logger.warn(`Target folder does not exist (dry-run): ${targetRoot}`);
+    }
+  }
+
+  const result = await core.ensureGitignore({ targetRoot, entry: DEFAULT_GITIGNORE_ENTRY, dryRun });
+  if (!result.changed) {
+    logger.info(`Already present: ${DEFAULT_GITIGNORE_ENTRY}`);
+    return;
+  }
+  logger.info(dryRun ? `Would add ${DEFAULT_GITIGNORE_ENTRY} to ${result.gitignorePath}` : `Added ${DEFAULT_GITIGNORE_ENTRY} to ${result.gitignorePath}`);
 }
 
 async function main() {
@@ -499,18 +525,55 @@ async function main() {
   const force = !!flags.force;
   const backup = !!flags.backup;
   const dryRun = !!flags["dry-run"];
+  const interactive = !!flags.interactive;
+  const quiet = !!flags.quiet;
+  const verbose = !!flags.verbose;
+  const logFile = typeof flags["log-file"] === "string" && flags["log-file"].trim() ? ensureAbsolute(flags["log-file"]) : null;
+  const logger = createLogger({ quiet, verbose, logFile });
+
+  if (cmd === "dashboard") {
+    const portRaw = typeof flags.port === "string" ? flags.port : flags.port === true ? "" : "";
+    const portNum = portRaw ? Number(portRaw) : 5177;
+    const port = Number.isFinite(portNum) && portNum > 0 ? portNum : 5177;
+    const serverEntry = path.resolve(__dirname, "..", "src", "server.js");
+    logger.info(`Dashboard: http://127.0.0.1:${port}/`);
+
+    const child = childProcess.spawn(process.execPath, [serverEntry], {
+      stdio: "inherit",
+      env: { ...process.env, PORT: String(port) },
+    });
+
+    await new Promise((resolve) => child.on("exit", resolve));
+    return;
+  }
+
+  if (cmd === "doctor") {
+    await doctorCommand({ templateRoot, logger });
+    return;
+  }
 
   if (cmd === "init") {
-    const mode = getMode(flags);
-    await initCommand({ templateRoot, targetRoot, mode, force, backup, dryRun });
+    let resolvedTargetRoot = targetRoot;
+    let mode = getMode(flags);
+
+    if (interactive || (!positionals[0] && isTty())) {
+      resolvedTargetRoot = normalizeTargetRoot(await promptLine("Project path", process.cwd()));
+      mode = await promptChoice("Deploy mode", ["symlink", "copy"], mode);
+    }
+
+    await initCommand({ templateRoot, targetRoot: resolvedTargetRoot, mode, force, backup, dryRun, logger });
     return;
   }
   if (cmd === "status") {
-    await statusCommand({ templateRoot, targetRoot });
+    await statusCommand({ templateRoot, targetRoot, logger });
     return;
   }
   if (cmd === "sync") {
-    await syncCommand({ templateRoot, targetRoot, force, backup, dryRun });
+    await syncCommand({ templateRoot, targetRoot, force, backup, dryRun, logger });
+    return;
+  }
+  if (cmd === "gitignore") {
+    await gitignoreCommand({ targetRoot, dryRun, logger });
     return;
   }
 

@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Trae Rule Dashboard</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="container">
+      <header class="header">
+        <h1>Trae Rule Dashboard</h1>
+        <div class="sub">Deploy and manage .trae rules in projects</div>
+      </header>
+
+      <section class="panel">
+        <div class="row">
+          <label class="label">Project Path</label>
+          <input id="projectPath" class="input" placeholder="e.g. C:\path\to\project" />
+        </div>
+
+        <div class="row">
+          <label class="label">Template Root</label>
+          <input id="templateRoot" class="input" placeholder="(default: this tool's Template/ folder)" />
+        </div>
+
+        <div class="row">
+          <label class="label">Mode</label>
+          <div class="inline">
+            <label class="radio"><input type="radio" name="mode" value="symlink" checked /> symlink</label>
+            <label class="radio"><input type="radio" name="mode" value="copy" /> copy</label>
+          </div>
+        </div>
+
+        <div class="row">
+          <label class="label">Options</label>
+          <div class="inline wrap">
+            <label class="check"><input id="force" type="checkbox" /> force</label>
+            <label class="check"><input id="backup" type="checkbox" /> backup</label>
+            <label class="check"><input id="dryRun" type="checkbox" /> dry-run</label>
+          </div>
+        </div>
+
+        <div class="buttons">
+          <button id="btnInit" class="btn primary">Init</button>
+          <button id="btnStatus" class="btn">Status</button>
+          <button id="btnSync" class="btn">Sync</button>
+          <button id="btnGitignore" class="btn">Add .gitignore</button>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="row between">
+          <div class="label">Output</div>
+          <div class="inline">
+            <button id="btnClear" class="btn small">Clear</button>
+          </div>
+        </div>
+        <pre id="output" class="output"></pre>
+      </section>
+
+      <section class="panel" id="previewPanel" hidden>
+        <div class="row between">
+          <div class="label">Dry-run Preview</div>
+          <div class="inline">
+            <button id="btnHidePreview" class="btn small">Hide</button>
+          </div>
+        </div>
+        <div class="previewSummary" id="previewSummary"></div>
+        <div class="tableWrap">
+          <table class="table" id="previewTable">
+            <thead>
+              <tr>
+                <th>Action</th>
+                <th>Path</th>
+                <th>Overwrite</th>
+                <th>Backup</th>
+              </tr>
+            </thead>
+            <tbody id="previewBody"></tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+
+    <script src="/app.js"></script>
+  </body>
+</html>
