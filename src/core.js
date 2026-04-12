@@ -34,8 +34,9 @@ async function exists(p) {
   try {
     await fsp.lstat(p);
     return true;
-  } catch {
-    return false;
+  } catch (e) {
+    if (e && e.code === "ENOENT") return false;
+    throw e;
   }
 }
 

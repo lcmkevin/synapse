@@ -31,9 +31,11 @@ async function readBodyJson(req) {
 function safePathFromPublic(urlPath) {
   const p = urlPath === "/" ? "/index.html" : urlPath;
   const decoded = decodeURIComponent(p);
-  const normalized = path.posix.normalize(decoded);
-  if (normalized.includes("..")) return null;
-  return path.join(PUBLIC_DIR, normalized);
+  const asPosix = decoded.replace(/\\/g, "/");
+  const filePath = path.resolve(PUBLIC_DIR, "." + asPosix);
+  const rel = path.relative(PUBLIC_DIR, filePath);
+  if (rel.startsWith("..") || path.isAbsolute(rel)) return null;
+  return filePath;
 }
 
 function contentType(filePath) {
