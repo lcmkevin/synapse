@@ -5,7 +5,20 @@
   "description": "Deploy Trae Template into projects (copy or symlink) with status and sync.",
   "license": "MIT",
   "bin": {
-    "trae-template": "bin/trae-template.js"
+    "trae-template": "bin/trae-template.js",
+    "trae-rule": "bin/trae-template.js"
+  },
+  "files": [
+    "bin/",
+    "src/",
+    "public/",
+    "Template/",
+    "README.md",
+    "package.json"
+  ],
+  "scripts": {
+    "cli": "node ./bin/trae-template.js help",
+    "dashboard": "node ./src/server.js"
   },
   "engines": {
     "node": ">=16.17.0"
