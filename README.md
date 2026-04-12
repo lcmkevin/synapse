@@ -69,7 +69,8 @@ node .\bin\trae-template.js init C:\project --copy --dry-run
 
 Notes:
 - `--symlink` is the default; if symlink fails on Windows, it falls back to `copy`.
-- `--backup` creates `*.bak.YYYYMMDD_HHMMSS` before overwriting (use together with `--force`).
+- `--backup` keeps a copy of any file that will be overwritten by renaming it to `*.bak.YYYYMMDD_HHMMSS` first (use together with `--force`).
+  - Example: `.trae/rules/tooling.md` becomes `.trae/rules/tooling.md.bak.20260412_080427`
 
 ### status
 
