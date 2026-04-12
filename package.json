@@ -1,15 +1,55 @@
 {
   "name": "trae-template-deployer",
+  "displayName": "Trae Rule Deployer",
   "version": "0.1.0",
   "private": true,
   "description": "Deploy Trae Template into projects (copy or symlink) with status and sync.",
+  "publisher": "lcmkevin",
   "license": "MIT",
   "bin": {
     "trae-template": "bin/trae-template.js",
     "trae-rule": "bin/trae-template.js"
   },
+  "main": "./extension.js",
+  "activationEvents": [
+    "onCommand:traeRule.setup",
+    "onCommand:traeRule.status",
+    "onCommand:traeRule.sync",
+    "onCommand:traeRule.gitignore",
+    "onCommand:traeRule.dashboard",
+    "onCommand:traeRule.doctor"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "traeRule.setup",
+        "title": "Trae Rule: Setup (Init) Rules"
+      },
+      {
+        "command": "traeRule.status",
+        "title": "Trae Rule: Status"
+      },
+      {
+        "command": "traeRule.sync",
+        "title": "Trae Rule: Sync (Copy Mode)"
+      },
+      {
+        "command": "traeRule.gitignore",
+        "title": "Trae Rule: Add .trae/ to .gitignore"
+      },
+      {
+        "command": "traeRule.dashboard",
+        "title": "Trae Rule: Open Dashboard"
+      },
+      {
+        "command": "traeRule.doctor",
+        "title": "Trae Rule: Doctor"
+      }
+    ]
+  },
   "files": [
     "bin/",
+    "extension.js",
     "src/",
     "public/",
     "Template/",
@@ -21,6 +61,7 @@
     "dashboard": "node ./src/server.js"
   },
   "engines": {
+    "vscode": "^1.85.0",
     "node": ">=16.17.0"
   }
 }
