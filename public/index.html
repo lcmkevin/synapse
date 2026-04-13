@@ -81,6 +81,123 @@
           </table>
         </div>
       </section>
+
+      <section class="panel">
+        <div class="row">
+          <div class="label">Merge</div>
+          <div class="inline wrap">
+            <label class="radio"><input type="radio" name="mergeMode" value="git" checked /> git conflict</label>
+            <label class="radio"><input type="radio" name="mergeMode" value="paths" /> three-way paths</label>
+          </div>
+        </div>
+
+        <div id="mergeGitFields">
+          <div class="row">
+            <label class="label">File Path (git)</label>
+            <input id="mergeGitFilePath" class="input" placeholder="e.g. .trae/rules/project_rules.md" />
+          </div>
+          <div class="row">
+            <label class="label">Output Path (optional)</label>
+            <input id="mergeGitOutPath" class="input" placeholder="(default: overwrite file if apply is enabled)" />
+          </div>
+        </div>
+
+        <div id="mergePathsFields" hidden>
+          <div class="row">
+            <label class="label">Base Path</label>
+            <input id="mergeBasePath" class="input" placeholder="relative to Project Path, e.g. .trae/rules/base.md" />
+          </div>
+          <div class="row">
+            <label class="label">Ours Path</label>
+            <input id="mergeOursPath" class="input" placeholder="relative to Project Path, e.g. .trae/rules/ours.md" />
+          </div>
+          <div class="row">
+            <label class="label">Theirs Path</label>
+            <input id="mergeTheirsPath" class="input" placeholder="relative to Project Path, e.g. .trae/rules/theirs.md" />
+          </div>
+          <div class="row">
+            <label class="label">Output Path (optional)</label>
+            <input id="mergeOutPath" class="input" placeholder="relative to Project Path (default: none unless apply is enabled)" />
+          </div>
+        </div>
+
+        <div class="row">
+          <label class="label">Options</label>
+          <div class="inline wrap">
+            <label class="check"><input id="mergeApply" type="checkbox" checked /> apply</label>
+            <label class="check"><input id="mergeDiff3" type="checkbox" /> diff3</label>
+          </div>
+        </div>
+
+        <div class="buttons">
+          <button id="btnMerge" class="btn">Merge</button>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="row">
+          <div class="label">Sync / Publish</div>
+        </div>
+
+        <div class="row">
+          <label class="label">Source</label>
+          <div class="inline wrap">
+            <label class="radio"><input type="radio" name="syncSourceMode" value="local" checked /> local folder</label>
+            <label class="radio"><input type="radio" name="syncSourceMode" value="git" /> git repo</label>
+          </div>
+        </div>
+
+        <div id="syncLocalFields">
+          <div class="row">
+            <label class="label">Source Folder</label>
+            <input id="syncSourcePath" class="input" placeholder="e.g. C:\path\to\source (contains .trae/)" />
+          </div>
+        </div>
+
+        <div id="syncGitFields" hidden>
+          <div class="row">
+            <label class="label">Repo URL</label>
+            <input id="syncRepoUrl" class="input" placeholder="e.g. git@github.com:org/trae-rules.git" />
+          </div>
+          <div class="row">
+            <label class="label">Branch</label>
+            <input id="syncBranch" class="input" placeholder="main" />
+          </div>
+        </div>
+
+        <div class="row">
+          <label class="label">Options</label>
+          <div class="inline wrap">
+            <label class="check"><input id="syncOverwrite" type="checkbox" /> overwrite</label>
+          </div>
+        </div>
+
+        <div class="buttons">
+          <button id="btnSyncRules" class="btn">Sync Rules</button>
+          <button id="btnSyncSkills" class="btn">Sync Skills</button>
+        </div>
+
+        <div class="row">
+          <div class="label">Publish to Team Repo</div>
+        </div>
+
+        <div class="row">
+          <label class="label">Repo URL</label>
+          <input id="publishRepoUrl" class="input" placeholder="e.g. git@github.com:org/trae-rules.git" />
+        </div>
+        <div class="row">
+          <label class="label">Branch</label>
+          <input id="publishBranch" class="input" placeholder="main" />
+        </div>
+        <div class="row">
+          <label class="label">Commit Message</label>
+          <input id="publishMessage" class="input" placeholder="Publish Trae rules/skills" />
+        </div>
+
+        <div class="buttons">
+          <button id="btnPublish" class="btn">Publish</button>
+        </div>
+      </section>
     </div>
 
     <script src="/app.js"></script>

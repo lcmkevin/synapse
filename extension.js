@@ -11,21 +11,40 @@ function templateRootFromExtension(context) {
   return path.resolve(context.extensionPath, "Template");
 }
 
-async function pickWorkspaceFolder() {
+async function pickTargetFolder() {
   const folders = vscode.workspace.workspaceFolders || [];
-  if (folders.length === 0) {
-    vscode.window.showErrorMessage("No workspace folder is open. Open a folder first.");
+  
+  const items = [];
+  folders.forEach((f) => {
+    items.push({
+      label: `$(folder) ${f.name}`,
+      description: f.uri.fsPath,
+      uri: f.uri,
+    });
+  });
+  items.push({
+    label: "$(folder-opened) Browse for another folder...",
+    description: "Select a folder from your computer",
+    isBrowse: true,
+  });
+
+  const picked = await vscode.window.showQuickPick(items, { placeHolder: "Select the target project folder" });
+  if (!picked) return null;
+
+  if (picked.isBrowse) {
+    const uriArr = await vscode.window.showOpenDialog({
+      canSelectFiles: false,
+      canSelectFolders: true,
+      canSelectMany: false,
+      openLabel: "Select Target Folder"
+    });
+    if (uriArr && uriArr.length > 0) {
+      return uriArr[0];
+    }
     return null;
   }
-  if (folders.length === 1) return folders[0];
 
-  const items = folders.map((f) => ({
-    label: f.name,
-    description: f.uri.fsPath,
-    folder: f,
-  }));
-  const picked = await vscode.window.showQuickPick(items, { placeHolder: "Select a workspace folder" });
-  return picked ? picked.folder : null;
+  return picked.uri;
 }
 
 function ensureOutputChannel(state) {
@@ -36,8 +55,8 @@ function ensureOutputChannel(state) {
 }
 
 async function setupCommand(context, state) {
-  const folder = await pickWorkspaceFolder();
-  if (!folder) return;
+  const targetUri = await pickTargetFolder();
+  if (!targetUri) return;
 
   const mode = await vscode.window.showQuickPick(
     [
@@ -84,7 +103,7 @@ async function setupCommand(context, state) {
       toolName: "trae-rule-deployer-vscode",
       version: "0.1.0",
       templateRoot,
-      targetRoot: folder.uri.fsPath,
+      targetRoot: targetUri.fsPath,
       mode: mode.label,
       force: forcePick.value,
       backup: backupPick.value,
@@ -94,25 +113,41 @@ async function setupCommand(context, state) {
       },
     });
     output.appendLine(JSON.stringify(res, null, 2));
-    vscode.window.showInformationMessage(`Trae rules deployed: applied ${res.applied.length}, skipped ${res.skipped.length}${res.dryRun ? " (dry-run)" : ""}`);
+
+    const isOpened = (vscode.workspace.workspaceFolders || []).some((f) => {
+      // Compare paths using path.normalize for safety
+      return path.normalize(f.uri.fsPath).toLowerCase() === path.normalize(targetUri.fsPath).toLowerCase();
+    });
+
+    if (!isOpened && !res.dryRun) {
+      const openPick = await vscode.window.showInformationMessage(
+        `Trae rules deployed successfully to ${path.basename(targetUri.fsPath)}! Would you like to open this project now?`,
+        "Open Project"
+      );
+      if (openPick === "Open Project") {
+        await vscode.commands.executeCommand("vscode.openFolder", targetUri);
+      }
+    } else {
+      vscode.window.showInformationMessage(`Trae rules deployed: applied ${res.applied.length}, skipped ${res.skipped.length}${res.dryRun ? " (dry-run)" : ""}`);
+    }
   } catch (e) {
     vscode.window.showErrorMessage(e && e.message ? e.message : String(e));
   }
 }
 
 async function statusCommand(context, state) {
-  const folder = await pickWorkspaceFolder();
-  if (!folder) return;
+  const targetUri = await pickTargetFolder();
+  if (!targetUri) return;
 
   const output = ensureOutputChannel(state);
   output.show(true);
-  output.appendLine(`Status: ${folder.uri.fsPath}`);
+  output.appendLine(`Status: ${targetUri.fsPath}`);
 
   try {
     const templateRoot = templateRootFromExtension(context);
     const res = await core.statusCheck({
       templateRoot,
-      targetRoot: folder.uri.fsPath,
+      targetRoot: targetUri.fsPath,
       onProgress: (e) => {
         if (e && e.relPosix) output.appendLine(`${e.type} ${e.relPosix}`);
       },
@@ -125,8 +160,8 @@ async function statusCommand(context, state) {
 }
 
 async function syncCommand(context, state) {
-  const folder = await pickWorkspaceFolder();
-  if (!folder) return;
+  const targetUri = await pickTargetFolder();
+  if (!targetUri) return;
 
   const forcePick = await vscode.window.showQuickPick(
     [
@@ -157,13 +192,13 @@ async function syncCommand(context, state) {
 
   const output = ensureOutputChannel(state);
   output.show(true);
-  output.appendLine(`Sync: ${folder.uri.fsPath}`);
+  output.appendLine(`Sync: ${targetUri.fsPath}`);
 
   try {
     const templateRoot = templateRootFromExtension(context);
     const res = await core.syncCopy({
       templateRoot,
-      targetRoot: folder.uri.fsPath,
+      targetRoot: targetUri.fsPath,
       force: forcePick.value,
       backup: backupPick.value,
       dryRun: dryRunPick.value,
@@ -187,8 +222,8 @@ async function syncCommand(context, state) {
 }
 
 async function gitignoreCommand(state) {
-  const folder = await pickWorkspaceFolder();
-  if (!folder) return;
+  const targetUri = await pickTargetFolder();
+  if (!targetUri) return;
 
   const dryRunPick = await vscode.window.showQuickPick(
     [
@@ -201,10 +236,10 @@ async function gitignoreCommand(state) {
 
   const output = ensureOutputChannel(state);
   output.show(true);
-  output.appendLine(`Gitignore: ${folder.uri.fsPath}`);
+  output.appendLine(`Gitignore: ${targetUri.fsPath}`);
 
   try {
-    const res = await core.ensureGitignore({ targetRoot: folder.uri.fsPath, dryRun: dryRunPick.value });
+    const res = await core.ensureGitignore({ targetRoot: targetUri.fsPath, dryRun: dryRunPick.value });
     output.appendLine(JSON.stringify(res, null, 2));
     vscode.window.showInformationMessage(res.changed ? "Added .trae/ to .gitignore" : ".trae/ already present in .gitignore");
   } catch (e) {

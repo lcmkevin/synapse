@@ -20,6 +20,9 @@ Use the dashboard to:
 - enter (or create) a new project folder path
 - click Init (copy or symlink)
 - optionally add `.trae/` to `.gitignore`
+- sync rules/skills from a folder or team Git repo
+- publish your current rules/skills to a team Git repo
+- resolve merge conflicts (git conflict or three-way merge)
 
 Then open that project folder in Trae.
 
@@ -55,6 +58,13 @@ node .\bin\trae-template.js dashboard --port=5178
 
 Then open:
 - `http://127.0.0.1:5177/` (or the port you selected)
+
+Dashboard usage (high level):
+- Project Path: the destination project folder that will receive `.trae/`
+- Template Root: usually leave empty (auto-filled); override only if you want a different Template folder
+- Init/Status/Sync/Add .gitignore: same behavior as the CLI commands below
+- Merge: uses either Git conflict stages (recommended when you have a real `git` conflict) or a three-way merge with base/ours/theirs files
+- Sync/Publish: lets you import/export `.trae/rules` and `.trae/skills` using local folders or Git repos
 
 ### init
 
@@ -105,6 +115,80 @@ Add `.trae/` to the target project's `.gitignore` (to avoid disclosing your rule
 node .\bin\trae-template.js gitignore C:\project
 node .\bin\trae-template.js gitignore C:\project --dry-run
 ```
+
+### sync-rules
+
+Copy rules into the target project's `.trae/rules`.
+
+From a local folder:
+
+```powershell
+node .\bin\trae-template.js sync-rules C:\project --from C:\sourceProject --overwrite
+```
+
+From a team Git repo:
+
+```powershell
+node .\bin\trae-template.js sync-rules C:\project --repo git@github.com:org\trae-rules.git --branch main --overwrite
+```
+
+Notes:
+- The source can be either a folder that contains `.trae/rules`, or a folder that contains `.trae/` (the tool will find the right subfolder).
+- If you omit `--overwrite`, existing files are kept.
+- Git usage requires `git` installed and authenticated (SSH recommended).
+
+### sync-skills
+
+Copy skills into the target project's `.trae/skills`.
+
+```powershell
+node .\bin\trae-template.js sync-skills C:\project --from C:\sourceProject --overwrite
+node .\bin\trae-template.js sync-skills C:\project --repo git@github.com:org\trae-rules.git --branch main --overwrite
+```
+
+### publish
+
+Publish the target project's `.trae/rules` and `.trae/skills` into a shared Git repository by cloning it, copying files, committing, and pushing.
+
+```powershell
+node .\bin\trae-template.js publish C:\project --repo git@github.com:org\trae-rules.git --branch main --message "Update rules"
+```
+
+Notes:
+- Git usage requires `git` installed and authenticated (SSH recommended).
+- If there are no file changes, publish is skipped.
+
+### merge
+
+Three-way merge using explicit file paths (base/ours/theirs). This uses `git merge-file` under the hood.
+
+Print merged output to stdout:
+
+```powershell
+node .\bin\trae-template.js merge --base C:\tmp\base.md --ours C:\tmp\ours.md --theirs C:\tmp\theirs.md --diff3
+```
+
+Write merged output:
+
+```powershell
+node .\bin\trae-template.js merge --base C:\tmp\base.md --ours C:\tmp\ours.md --theirs C:\tmp\theirs.md --out C:\tmp\merged.md --apply --diff3
+```
+
+Exit code:
+- `0` if merged cleanly
+- `2` if conflict markers remain in the output
+
+### merge-git
+
+Merge a real Git conflict using the Git index stages `:1/:2/:3` (base/ours/theirs).
+
+```powershell
+node .\bin\trae-template.js merge-git .trae\rules\project_rules.md --repo C:\project --apply --diff3
+```
+
+Notes:
+- Run this inside a repo that currently has that file conflicted, or pass `--repo`.
+- If `--apply` is enabled and `--out` is not provided, it overwrites the conflicted working-tree file with the merged output.
 
 ## Common Flags
 

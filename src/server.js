@@ -119,6 +119,92 @@ async function handleApi(req, res, url) {
     return sendJson(res, 200, { ok: true, result });
   }
 
+  if (url.pathname === "/api/syncRules") {
+    const overwrite = !!body.overwrite;
+    const sourcePath = typeof body.sourcePath === "string" ? body.sourcePath : "";
+    const repoUrl = typeof body.repoUrl === "string" ? body.repoUrl : "";
+    const branch = typeof body.branch === "string" ? body.branch : "main";
+
+    const events = [];
+    let result;
+    if (repoUrl && repoUrl.trim()) {
+      events.push({ type: "git", repoUrl, branch });
+      result = await core.syncTraeFromGit({ repoUrl: repoUrl.trim(), branch, targetRoot, kind: "rules", overwrite });
+    } else {
+      if (!sourcePath || !sourcePath.trim()) return sendJson(res, 400, { error: "sourcePath or repoUrl required" });
+      events.push({ type: "copy", sourcePath: sourcePath.trim() });
+      result = await core.syncTraeFolder({ sourceRoot: core.ensureAbsolute(sourcePath.trim()), targetRoot, kind: "rules", overwrite });
+    }
+    return sendJson(res, 200, { ok: true, result, events });
+  }
+
+  if (url.pathname === "/api/syncSkills") {
+    const overwrite = !!body.overwrite;
+    const sourcePath = typeof body.sourcePath === "string" ? body.sourcePath : "";
+    const repoUrl = typeof body.repoUrl === "string" ? body.repoUrl : "";
+    const branch = typeof body.branch === "string" ? body.branch : "main";
+
+    const events = [];
+    let result;
+    if (repoUrl && repoUrl.trim()) {
+      events.push({ type: "git", repoUrl, branch });
+      result = await core.syncTraeFromGit({ repoUrl: repoUrl.trim(), branch, targetRoot, kind: "skills", overwrite });
+    } else {
+      if (!sourcePath || !sourcePath.trim()) return sendJson(res, 400, { error: "sourcePath or repoUrl required" });
+      events.push({ type: "copy", sourcePath: sourcePath.trim() });
+      result = await core.syncTraeFolder({ sourceRoot: core.ensureAbsolute(sourcePath.trim()), targetRoot, kind: "skills", overwrite });
+    }
+    return sendJson(res, 200, { ok: true, result, events });
+  }
+
+  if (url.pathname === "/api/publish") {
+    const repoUrl = typeof body.repoUrl === "string" ? body.repoUrl : "";
+    const branch = typeof body.branch === "string" ? body.branch : "main";
+    const commitMessage = typeof body.commitMessage === "string" ? body.commitMessage : "Publish Trae rules/skills";
+    if (!repoUrl || !repoUrl.trim()) return sendJson(res, 400, { error: "repoUrl required" });
+
+    const result = await core.publishTraeToGit({ sourceRoot: targetRoot, repoUrl: repoUrl.trim(), branch, commitMessage });
+    return sendJson(res, 200, { ok: true, result });
+  }
+
+  if (url.pathname === "/api/merge") {
+    const mode = typeof body.mode === "string" ? body.mode : "paths";
+    const diff3 = !!body.diff3;
+    const apply = !!body.apply;
+
+    if (mode === "git") {
+      const repoRoot = targetRoot;
+      const filePath = typeof body.filePath === "string" ? body.filePath : "";
+      const outPath = typeof body.outPath === "string" ? body.outPath : "";
+      if (!filePath || !filePath.trim()) return sendJson(res, 400, { error: "filePath required" });
+      const result = await core.mergeGitIndexConflict({
+        repoRoot,
+        filePath: filePath.trim(),
+        outPath: outPath && outPath.trim() ? core.ensureAbsolute(outPath.trim(), repoRoot) : null,
+        diff3,
+        apply,
+      });
+      return sendJson(res, 200, { ok: true, result });
+    }
+
+    const basePath = typeof body.basePath === "string" ? body.basePath : "";
+    const oursPath = typeof body.oursPath === "string" ? body.oursPath : "";
+    const theirsPath = typeof body.theirsPath === "string" ? body.theirsPath : "";
+    const outPath = typeof body.outPath === "string" ? body.outPath : "";
+    if (!basePath || !oursPath || !theirsPath) return sendJson(res, 400, { error: "basePath, oursPath, theirsPath required" });
+
+    const result = await core.mergeThreeWay({
+      basePath: basePath.trim(),
+      oursPath: oursPath.trim(),
+      theirsPath: theirsPath.trim(),
+      outPath: outPath && outPath.trim() ? outPath.trim() : null,
+      diff3,
+      apply,
+      allowedRoot: targetRoot,
+    });
+    return sendJson(res, 200, { ok: true, result });
+  }
+
   return sendJson(res, 404, { error: "Not found" });
 }
 

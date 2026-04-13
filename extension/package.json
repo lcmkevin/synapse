@@ -1,0 +1,52 @@
+{
+  "name": "trae-rules-sync",
+  "displayName": "Trae Rules & Skills Sync",
+  "description": "Copy, sync, publish and merge Trae rules/skills from any folder or Git repo into the current workspace.",
+  "version": "0.1.0",
+  "publisher": "lcmkevin",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": ["Other"],
+  "activationEvents": [
+    "onCommand:trae.syncRules",
+    "onCommand:trae.syncSkills",
+    "onCommand:trae.publishToTeam",
+    "onCommand:trae.mergeConflict"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "trae.syncRules",
+        "title": "Trae: Sync Rules into Workspace"
+      },
+      {
+        "command": "trae.syncSkills",
+        "title": "Trae: Sync Skills into Workspace"
+      },
+      {
+        "command": "trae.publishToTeam",
+        "title": "Trae: Publish Rules/Skills to Team Repo"
+      },
+      {
+        "command": "trae.mergeConflict",
+        "title": "Trae: Resolve Merge Conflict"
+      }
+    ]
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.85.0",
+    "@types/node": "^20.x",
+    "typescript": "^5.3.0"
+  },
+  "dependencies": {
+    "@core": "file:../src"
+  }
+}
