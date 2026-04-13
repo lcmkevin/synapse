@@ -4,7 +4,6 @@
 const fs = require("fs");
 const fsp = fs.promises;
 const path = require("path");
-const crypto = require("crypto");
 const readline = require("readline");
 const childProcess = require("child_process");
 const os = require("os");
@@ -15,31 +14,6 @@ const DEFAULT_TEMPLATE_ROOT = path.resolve(__dirname, "..", "Template");
 const DEFAULT_TEMPLATE_SUBPATH = ".trae";
 const DEFAULT_STATE_FILE = path.posix.join(".trae", ".deployer.json");
 const DEFAULT_GITIGNORE_ENTRY = ".trae/";
-
-function toPosixPath(p) {
-  return p.split(path.sep).join(path.posix.sep);
-}
-
-function fromPosixPath(p) {
-  return p.split(path.posix.sep).join(path.sep);
-}
-
-function ensureAbsolute(p) {
-  return path.isAbsolute(p) ? p : path.resolve(process.cwd(), p);
-}
-
-function normalizeTargetRoot(p) {
-  const abs = ensureAbsolute(p);
-  return abs.endsWith(path.sep) ? abs.slice(0, -1) : abs;
-}
-
-function sha256Buffer(buf) {
-  return crypto.createHash("sha256").update(buf).digest("hex");
-}
-
-function formatBackupSuffix(d) {
-  return d.toISOString().replace(/[-:]/g, "").replace(/\..+$/, "").replace("T", "_");
-}
 
 function isTty() {
   return !!process.stdout.isTTY && !!process.stdin.isTTY;
@@ -56,17 +30,6 @@ async function exists(p) {
 
 async function ensureDir(dir) {
   await fsp.mkdir(dir, { recursive: true });
-}
-
-async function readJsonIfExists(p) {
-  if (!(await exists(p))) return null;
-  const raw = await fsp.readFile(p, "utf8");
-  return JSON.parse(raw);
-}
-
-async function writeJson(p, value) {
-  await ensureDir(path.dirname(p));
-  await fsp.writeFile(p, JSON.stringify(value, null, 2) + "\n", "utf8");
 }
 
 function createLogger({ quiet, verbose, logFile }) {
@@ -181,6 +144,11 @@ function printHelp() {
       `  ${t} status [projectPath] [--template-root=PATH]`,
       `  ${t} sync [projectPath] [--force] [--backup] [--dry-run] [--template-root=PATH]`,
       `  ${t} gitignore [projectPath] [--dry-run]`,
+      `  ${t} sync-rules [projectPath] [--from=PATH|--repo=URL] [--branch=main] [--overwrite] [--interactive]`,
+      `  ${t} sync-skills [projectPath] [--from=PATH|--repo=URL] [--branch=main] [--overwrite] [--interactive]`,
+      `  ${t} publish [projectPath] --repo=URL [--branch=main] [--message=TEXT]`,
+      `  ${t} merge --base=PATH --ours=PATH --theirs=PATH [--out=PATH] [--apply] [--diff3]`,
+      `  ${t} merge-git <filePath> [--repo=PATH] [--out=PATH] [--apply] [--diff3]`,
       `  ${t} dashboard [--port=5177]`,
       `  ${t} doctor`,
       "",
@@ -251,77 +219,9 @@ async function doctorCommand({ templateRoot, logger }) {
   }
 }
 
-async function listFilesRecursively(rootDir) {
-  const results = [];
-  async function walk(dir) {
-    const entries = await fsp.readdir(dir, { withFileTypes: true });
-    for (const e of entries) {
-      const full = path.join(dir, e.name);
-      if (e.isDirectory()) {
-        await walk(full);
-      } else if (e.isFile()) {
-        results.push(full);
-      }
-    }
-  }
-  await walk(rootDir);
-  results.sort();
-  return results;
-}
-
-async function fileHash(p) {
-  const buf = await fsp.readFile(p);
-  return sha256Buffer(buf);
-}
-
-async function copyFileWithDirs(src, dest) {
-  await ensureDir(path.dirname(dest));
-  await fsp.copyFile(src, dest);
-}
-
-async function backupPathFor(dest) {
-  const dir = path.dirname(dest);
-  const base = path.basename(dest);
-  const stamp = formatBackupSuffix(new Date());
-  let candidate = path.join(dir, `${base}.bak.${stamp}`);
-  let i = 1;
-  while (await exists(candidate)) {
-    candidate = path.join(dir, `${base}.bak.${stamp}.${i}`);
-    i++;
-  }
-  return candidate;
-}
-
-async function backupExisting(dest) {
-  const st = await fsp.lstat(dest);
-  if (!st.isFile() && !st.isSymbolicLink()) return null;
-  const backup = await backupPathFor(dest);
-  await ensureDir(path.dirname(backup));
-  await fsp.rename(dest, backup);
-  return backup;
-}
-
-async function trySymlinkFile(src, dest) {
-  await ensureDir(path.dirname(dest));
-  if (await exists(dest)) {
-    await fsp.unlink(dest);
-  }
-  await fsp.symlink(src, dest, "file");
-}
-
-async function safeWriteState(targetRoot, state) {
-  const statePath = path.join(targetRoot, fromPosixPath(DEFAULT_STATE_FILE));
-  await writeJson(statePath, state);
-}
-
-async function loadState(targetRoot) {
-  const statePath = path.join(targetRoot, fromPosixPath(DEFAULT_STATE_FILE));
-  return await readJsonIfExists(statePath);
-}
-
 function resolveTemplateRoot(flags) {
   if (typeof flags["template-root"] === "string" && flags["template-root"].trim()) {
-    return ensureAbsolute(flags["template-root"]);
+    return core.ensureAbsolute(flags["template-root"]);
   }
   return DEFAULT_TEMPLATE_ROOT;
 }
@@ -349,26 +249,6 @@ async function promptChoice(question, choices, defaultValue) {
   const ans = await promptLine(`${question} [${choiceText}]`, defaultValue);
   if (choices.includes(ans)) return ans;
   return defaultValue;
-}
-
-async function computePlan({ templateRoot, targetRoot }) {
-  const templateTraeDir = path.join(templateRoot, DEFAULT_TEMPLATE_SUBPATH);
-  if (!(await exists(templateTraeDir))) {
-    throw new Error(`Template folder not found: ${templateTraeDir}`);
-  }
-
-  const srcFiles = await listFilesRecursively(templateTraeDir);
-  const plan = [];
-  for (const srcFile of srcFiles) {
-    const rel = path.relative(templateTraeDir, srcFile);
-    const dest = path.join(targetRoot, DEFAULT_TEMPLATE_SUBPATH, rel);
-    plan.push({
-      src: srcFile,
-      dest,
-      relPosix: toPosixPath(path.posix.join(DEFAULT_TEMPLATE_SUBPATH, toPosixPath(rel))),
-    });
-  }
-  return { templateTraeDir, plan };
 }
 
 async function initCommand({ templateRoot, targetRoot, mode, force, backup, dryRun, logger }) {
@@ -512,6 +392,107 @@ async function gitignoreCommand({ targetRoot, dryRun, logger }) {
   logger.info(dryRun ? `Would add ${DEFAULT_GITIGNORE_ENTRY} to ${result.gitignorePath}` : `Added ${DEFAULT_GITIGNORE_ENTRY} to ${result.gitignorePath}`);
 }
 
+async function syncTraeKindCommand({ kind, targetRoot, flags, logger }) {
+  const overwrite = !!flags.overwrite;
+  const interactive = !!flags.interactive;
+
+  const fromFlag = typeof flags.from === "string" && flags.from.trim() ? flags.from.trim() : "";
+  const repoFlag = typeof flags.repo === "string" && flags.repo.trim() ? flags.repo.trim() : "";
+  const branch = typeof flags.branch === "string" && flags.branch.trim() ? flags.branch.trim() : "main";
+
+  let sourceType = fromFlag ? "from" : repoFlag ? "repo" : "";
+  if (!sourceType) {
+    if (!interactive && !isTty()) {
+      throw new Error(`Missing source. Provide --from=PATH or --repo=URL.`);
+    }
+    sourceType = await promptChoice("Source type", ["from", "repo"], "from");
+  }
+
+  if (sourceType === "repo") {
+    const repoUrl = repoFlag || (await promptLine("Repo URL", ""));
+    if (!repoUrl) throw new Error("Repo URL is required.");
+    const res = await core.syncTraeFromGit({ repoUrl, branch, targetRoot, kind, overwrite });
+    logger.info(`Synced ${kind} from repo into ${path.join(targetRoot, ".trae", kind)}`);
+    logger.info(`Copied: ${res.copied}`);
+    logger.info("");
+    return;
+  }
+
+  const sourceRoot = fromFlag || (await promptLine("Source folder", process.cwd()));
+  const res = await core.syncTraeFolder({ sourceRoot, targetRoot, kind, overwrite });
+  logger.info(`Synced ${kind} from folder into ${path.join(targetRoot, ".trae", kind)}`);
+  logger.info(`Copied: ${res.copied}`);
+  logger.info("");
+}
+
+async function publishCommand({ targetRoot, flags, logger }) {
+  const repoUrl = typeof flags.repo === "string" && flags.repo.trim() ? flags.repo.trim() : "";
+  if (!repoUrl) throw new Error("Missing --repo=URL.");
+  const branch = typeof flags.branch === "string" && flags.branch.trim() ? flags.branch.trim() : "main";
+  const message = typeof flags.message === "string" && flags.message.trim() ? flags.message.trim() : "Publish Trae rules/skills";
+
+  const res = await core.publishTraeToGit({ sourceRoot: targetRoot, repoUrl, branch, commitMessage: message });
+  if (!res.changed) {
+    logger.info(`Publish skipped: ${res.reason}`);
+    return;
+  }
+  logger.info("Published rules/skills to team repo.");
+}
+
+async function mergeCommand({ flags, logger }) {
+  const base = typeof flags.base === "string" && flags.base.trim() ? flags.base.trim() : "";
+  const ours = typeof flags.ours === "string" && flags.ours.trim() ? flags.ours.trim() : "";
+  const theirs = typeof flags.theirs === "string" && flags.theirs.trim() ? flags.theirs.trim() : "";
+  const out = typeof flags.out === "string" && flags.out.trim() ? flags.out.trim() : "";
+  const diff3 = !!flags.diff3;
+  const apply = !!flags.apply || !!out;
+
+  if (!base || !ours || !theirs) {
+    throw new Error("Missing required flags: --base=PATH --ours=PATH --theirs=PATH");
+  }
+
+  const res = await core.mergeThreeWay({
+    basePath: core.ensureAbsolute(base),
+    oursPath: core.ensureAbsolute(ours),
+    theirsPath: core.ensureAbsolute(theirs),
+    outPath: out ? core.ensureAbsolute(out) : apply ? core.ensureAbsolute(ours) : null,
+    diff3,
+    apply,
+    cwd: process.cwd(),
+  });
+
+  if (!apply && !res.wrotePath) {
+    process.stdout.write(res.mergedText);
+  } else {
+    logger.info(`Merged output: ${res.wrotePath || out || ours}`);
+  }
+  if (res.hadConflicts) process.exitCode = 2;
+}
+
+async function mergeGitCommand({ positionals, flags, logger }) {
+  const filePath = positionals[0];
+  if (!filePath) throw new Error("Missing <filePath>.");
+  const repoRoot = typeof flags.repo === "string" && flags.repo.trim() ? flags.repo.trim() : process.cwd();
+  const out = typeof flags.out === "string" && flags.out.trim() ? flags.out.trim() : "";
+  const diff3 = !!flags.diff3;
+  const apply = !!flags.apply || !!out;
+
+  const res = await core.mergeGitIndexConflict({
+    repoRoot: core.ensureAbsolute(repoRoot),
+    filePath,
+    outPath: out ? core.ensureAbsolute(out) : null,
+    diff3,
+    apply,
+  });
+
+  if (!apply) {
+    process.stdout.write(res.mergedText);
+  } else {
+    logger.info(`Merged output: ${res.wrotePath || res.outPath}`);
+  }
+  if (res.hadConflicts) process.exitCode = 2;
+}
+
 async function main() {
   const { cmd, flags, positionals } = parseArgs(process.argv);
   if (flags.help || cmd === "help" || cmd === "--help" || cmd === "-h") {
@@ -520,7 +501,7 @@ async function main() {
   }
 
   const templateRoot = resolveTemplateRoot(flags);
-  const targetRoot = normalizeTargetRoot(positionals[0] || process.cwd());
+  const targetRoot = core.normalizeTargetRoot(positionals[0] || process.cwd());
 
   const force = !!flags.force;
   const backup = !!flags.backup;
@@ -528,7 +509,7 @@ async function main() {
   const interactive = !!flags.interactive;
   const quiet = !!flags.quiet;
   const verbose = !!flags.verbose;
-  const logFile = typeof flags["log-file"] === "string" && flags["log-file"].trim() ? ensureAbsolute(flags["log-file"]) : null;
+  const logFile = typeof flags["log-file"] === "string" && flags["log-file"].trim() ? core.ensureAbsolute(flags["log-file"]) : null;
   const logger = createLogger({ quiet, verbose, logFile });
 
   if (cmd === "dashboard") {
@@ -557,7 +538,7 @@ async function main() {
     let mode = getMode(flags);
 
     if (interactive || (!positionals[0] && isTty())) {
-      resolvedTargetRoot = normalizeTargetRoot(await promptLine("Project path", process.cwd()));
+      resolvedTargetRoot = core.normalizeTargetRoot(await promptLine("Project path", process.cwd()));
       mode = await promptChoice("Deploy mode", ["symlink", "copy"], mode);
     }
 
@@ -574,6 +555,26 @@ async function main() {
   }
   if (cmd === "gitignore") {
     await gitignoreCommand({ targetRoot, dryRun, logger });
+    return;
+  }
+  if (cmd === "sync-rules") {
+    await syncTraeKindCommand({ kind: "rules", targetRoot, flags, logger });
+    return;
+  }
+  if (cmd === "sync-skills") {
+    await syncTraeKindCommand({ kind: "skills", targetRoot, flags, logger });
+    return;
+  }
+  if (cmd === "publish") {
+    await publishCommand({ targetRoot, flags, logger });
+    return;
+  }
+  if (cmd === "merge") {
+    await mergeCommand({ flags, logger });
+    return;
+  }
+  if (cmd === "merge-git") {
+    await mergeGitCommand({ positionals, flags, logger });
     return;
   }
 

@@ -4,6 +4,8 @@ const fs = require("fs");
 const fsp = fs.promises;
 const path = require("path");
 const crypto = require("crypto");
+const childProcess = require("child_process");
+const os = require("os");
 
 const DEFAULT_TEMPLATE_SUBPATH = ".trae";
 const DEFAULT_STATE_FILE = path.posix.join(".trae", ".deployer.json");
@@ -472,7 +474,203 @@ async function ensureGitignore({ targetRoot, entry = DEFAULT_GITIGNORE_ENTRY, dr
   return { changed: true, gitignorePath, entry, dryRun: !!dryRun };
 }
 
+async function runProcess(cmd, args, cwd) {
+  return await new Promise((resolve, reject) => {
+    const child = childProcess.spawn(cmd, args, { cwd, windowsHide: true });
+    let stdout = "";
+    let stderr = "";
+    child.stdout.on("data", (b) => (stdout += b.toString("utf8")));
+    child.stderr.on("data", (b) => (stderr += b.toString("utf8")));
+    child.on("error", reject);
+    child.on("exit", (code) => resolve({ code: typeof code === "number" ? code : 1, stdout, stderr }));
+  });
+}
+
+async function resolveTraeSubdir(sourceRoot, kind) {
+  const dotTrae = path.join(sourceRoot, DEFAULT_TEMPLATE_SUBPATH, kind);
+  if (await exists(dotTrae)) return dotTrae;
+
+  const direct = path.join(sourceRoot, kind);
+  if (await exists(direct)) return direct;
+
+  if (await exists(sourceRoot)) return sourceRoot;
+  throw new Error(`Source folder not found: ${sourceRoot}`);
+}
+
+async function copyDirTree({ srcDir, destDir, overwrite }) {
+  if (!(await exists(srcDir))) throw new Error(`Source directory not found: ${srcDir}`);
+  await ensureDir(destDir);
+
+  const files = await listFilesRecursively(srcDir);
+  let copied = 0;
+  for (const srcFile of files) {
+    const rel = path.relative(srcDir, srcFile);
+    const destFile = path.join(destDir, rel);
+    const destExists = await exists(destFile);
+    if (destExists && !overwrite) continue;
+    await copyFileWithDirs(srcFile, destFile);
+    copied++;
+  }
+  return { copied, srcDir, destDir };
+}
+
+async function syncTraeFolder({ sourceRoot, targetRoot, kind, overwrite }) {
+  const srcDir = await resolveTraeSubdir(sourceRoot, kind);
+  const destDir = path.join(targetRoot, DEFAULT_TEMPLATE_SUBPATH, kind);
+  return await copyDirTree({ srcDir, destDir, overwrite: !!overwrite });
+}
+
+async function gitCloneToTemp({ repoUrl, branch }) {
+  const parent = await fsp.mkdtemp(path.join(os.tmpdir(), "trae-sync-"));
+  const repoDir = path.join(parent, "repo");
+  const cleanup = async () => {
+    await fsp.rm(parent, { recursive: true, force: true });
+  };
+
+  const res = await runProcess("git", ["clone", "--depth", "1", "--branch", branch || "main", repoUrl, repoDir], parent);
+  if (res.code !== 0) {
+    await cleanup();
+    const msg = (res.stderr || res.stdout || "").trim() || "git clone failed";
+    throw new Error(msg);
+  }
+
+  return { repoDir, cleanup };
+}
+
+async function syncTraeFromGit({ repoUrl, branch, targetRoot, kind, overwrite }) {
+  const { repoDir, cleanup } = await gitCloneToTemp({ repoUrl, branch });
+  try {
+    return await syncTraeFolder({ sourceRoot: repoDir, targetRoot, kind, overwrite });
+  } finally {
+    await cleanup();
+  }
+}
+
+async function publishTraeToGit({ sourceRoot, repoUrl, branch, commitMessage }) {
+  const { repoDir, cleanup } = await gitCloneToTemp({ repoUrl, branch });
+  try {
+    const srcTraeDir = path.join(sourceRoot, DEFAULT_TEMPLATE_SUBPATH);
+    const rulesDir = path.join(srcTraeDir, "rules");
+    const skillsDir = path.join(srcTraeDir, "skills");
+    if (!(await exists(rulesDir)) && !(await exists(skillsDir))) {
+      return { changed: false, reason: "no_rules_or_skills" };
+    }
+
+    const repoTraeDir = path.join(repoDir, DEFAULT_TEMPLATE_SUBPATH);
+    await ensureDir(repoTraeDir);
+
+    if (await exists(rulesDir)) {
+      await copyDirTree({ srcDir: rulesDir, destDir: path.join(repoTraeDir, "rules"), overwrite: true });
+    }
+    if (await exists(skillsDir)) {
+      await copyDirTree({ srcDir: skillsDir, destDir: path.join(repoTraeDir, "skills"), overwrite: true });
+    }
+
+    const statusRes = await runProcess("git", ["status", "--porcelain"], repoDir);
+    if (statusRes.code !== 0) throw new Error((statusRes.stderr || statusRes.stdout || "git status failed").trim());
+    if (!statusRes.stdout.trim()) {
+      return { changed: false, reason: "no_changes" };
+    }
+
+    const addRes = await runProcess("git", ["add", "-A"], repoDir);
+    if (addRes.code !== 0) throw new Error((addRes.stderr || addRes.stdout || "git add failed").trim());
+
+    const msg = commitMessage && String(commitMessage).trim() ? String(commitMessage).trim() : "Publish Trae rules/skills";
+    const commitRes = await runProcess("git", ["commit", "-m", msg], repoDir);
+    if (commitRes.code !== 0) throw new Error((commitRes.stderr || commitRes.stdout || "git commit failed").trim());
+
+    const pushRes = await runProcess("git", ["push", "origin", branch || "main"], repoDir);
+    if (pushRes.code !== 0) throw new Error((pushRes.stderr || pushRes.stdout || "git push failed").trim());
+
+    return { changed: true };
+  } finally {
+    await cleanup();
+  }
+}
+
+function resolveUnderRoot(root, p) {
+  const abs = path.isAbsolute(p) ? p : path.resolve(root, p);
+  const rel = path.relative(root, abs);
+  if (rel.startsWith("..") || path.isAbsolute(rel)) return null;
+  return abs;
+}
+
+async function mergeThreeWay({ basePath, oursPath, theirsPath, outPath, diff3, apply, cwd, allowedRoot }) {
+  const baseAbs = allowedRoot ? resolveUnderRoot(allowedRoot, basePath) : ensureAbsolute(basePath, cwd);
+  const oursAbs = allowedRoot ? resolveUnderRoot(allowedRoot, oursPath) : ensureAbsolute(oursPath, cwd);
+  const theirsAbs = allowedRoot ? resolveUnderRoot(allowedRoot, theirsPath) : ensureAbsolute(theirsPath, cwd);
+  const outAbs = outPath ? (allowedRoot ? resolveUnderRoot(allowedRoot, outPath) : ensureAbsolute(outPath, cwd)) : null;
+
+  if (!baseAbs || !oursAbs || !theirsAbs || (outPath && !outAbs)) {
+    throw new Error("Path is outside the allowed root.");
+  }
+  if (!(await exists(baseAbs))) throw new Error(`Base file not found: ${baseAbs}`);
+  if (!(await exists(oursAbs))) throw new Error(`Ours file not found: ${oursAbs}`);
+  if (!(await exists(theirsAbs))) throw new Error(`Theirs file not found: ${theirsAbs}`);
+
+  const args = ["merge-file", "-p"];
+  if (diff3) args.push("--diff3");
+  args.push(oursAbs, baseAbs, theirsAbs);
+
+  const runCwd = path.dirname(oursAbs);
+  const res = await runProcess("git", args, runCwd);
+  if (res.code !== 0 && res.code !== 1) {
+    const msg = (res.stderr || res.stdout || "").trim() || "git merge-file failed";
+    throw new Error(msg);
+  }
+
+  const mergedText = res.stdout;
+  const hadConflicts = res.code === 1;
+
+  let wrotePath = null;
+  const shouldWrite = !!(outAbs && (apply || apply === undefined));
+  if (shouldWrite) {
+    await ensureDir(path.dirname(outAbs));
+    await fsp.writeFile(outAbs, mergedText, "utf8");
+    wrotePath = outAbs;
+  }
+
+  return { mergedText, hadConflicts, wrotePath };
+}
+
+async function mergeGitIndexConflict({ repoRoot, filePath, outPath, diff3, apply }) {
+  const repoAbs = ensureAbsolute(repoRoot);
+  const rel = toPosixPath(filePath);
+
+  const baseRes = await runProcess("git", ["show", `:1:${rel}`], repoAbs);
+  const oursRes = await runProcess("git", ["show", `:2:${rel}`], repoAbs);
+  const theirsRes = await runProcess("git", ["show", `:3:${rel}`], repoAbs);
+
+  if (baseRes.code !== 0 || oursRes.code !== 0 || theirsRes.code !== 0) {
+    const msg = (baseRes.stderr || oursRes.stderr || theirsRes.stderr || baseRes.stdout || "").trim() || "git show stage failed";
+    throw new Error(msg);
+  }
+
+  const tempDir = await fsp.mkdtemp(path.join(os.tmpdir(), "trae-merge-"));
+  const cleanup = async () => {
+    await fsp.rm(tempDir, { recursive: true, force: true });
+  };
+
+  try {
+    const basePath = path.join(tempDir, "base");
+    const oursPath = path.join(tempDir, "ours");
+    const theirsPath = path.join(tempDir, "theirs");
+    await Promise.all([
+      fsp.writeFile(basePath, baseRes.stdout, "utf8"),
+      fsp.writeFile(oursPath, oursRes.stdout, "utf8"),
+      fsp.writeFile(theirsPath, theirsRes.stdout, "utf8"),
+    ]);
+
+    const out = outPath ? ensureAbsolute(outPath, repoAbs) : ensureAbsolute(fromPosixPath(rel), repoAbs);
+    const result = await mergeThreeWay({ basePath, oursPath, theirsPath, outPath: out, diff3, apply, cwd: repoAbs });
+    return { ...result, outPath: out };
+  } finally {
+    await cleanup();
+  }
+}
+
 module.exports = {
+  apiVersion: 1,
   DEFAULT_TEMPLATE_SUBPATH,
   DEFAULT_STATE_FILE,
   DEFAULT_GITIGNORE_ENTRY,
@@ -483,4 +681,13 @@ module.exports = {
   statusCheck,
   syncCopy,
   ensureGitignore,
+  deploy: initDeploy,
+  status: statusCheck,
+  sync: syncCopy,
+  gitignore: ensureGitignore,
+  syncTraeFolder,
+  syncTraeFromGit,
+  publishTraeToGit,
+  mergeThreeWay,
+  mergeGitIndexConflict,
 };
