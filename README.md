@@ -1,30 +1,27 @@
 # Trae Rule Deployer
 
-Quickly deploy Trae `.trae/` rules into any development project (copy or symlink), with status/sync support and a helper to add `.trae/` into `.gitignore`.
+Deploy and manage Trae `.trae/` rules/skills for any project.
 
-## Quick Start
+This repo is structured as:
+- CLI + local dashboard (safe to publish)
+- VS Code / Trae extension (kept separate for prototyping and future paid features)
+
+## Repo Structure
+
+- CLI: [trae-template.js](file:///C:/MyProgram/Trae/bin/trae-template.js)
+- Shared core: [core.js](file:///C:/MyProgram/Trae/src/core.js)
+- Dashboard server: [server.js](file:///C:/MyProgram/Trae/src/server.js)
+- Dashboard UI: [public](file:///C:/MyProgram/Trae/public)
+- Template source: [Template](file:///C:/MyProgram/Trae/Template)
+- Extension (prototype): [extension](file:///C:/MyProgram/Trae/extension)
+
+## Quick Start (CLI)
 
 From this repo folder (no install):
 
 ```powershell
 node .\bin\trae-template.js help
 ```
-
-Easiest workflow (dashboard-first):
-
-```powershell
-node .\bin\trae-template.js dashboard
-```
-
-Use the dashboard to:
-- enter (or create) a new project folder path
-- click Init (copy or symlink)
-- optionally add `.trae/` to `.gitignore`
-- sync rules/skills from a folder or team Git repo
-- publish your current rules/skills to a team Git repo
-- resolve merge conflicts (git conflict or three-way merge)
-
-Then open that project folder in Trae.
 
 Deploy to a target project:
 
@@ -44,6 +41,22 @@ Optional: install a command name (`trae-rule`) for easier usage:
 npm link
 trae-rule help
 ```
+
+## Quick Start (Dashboard)
+
+```powershell
+node .\bin\trae-template.js dashboard
+```
+
+Then open:
+- `http://127.0.0.1:5177/`
+
+Use the dashboard to:
+- set Project Path (destination project folder)
+- Init / Status / Sync / Add .gitignore
+- Sync/Publish rules/skills from local folder or Git repo
+- Preview preset sync changes and apply selectively
+- Merge conflicts (git conflict or three-way merge)
 
 ## Commands
 
@@ -65,6 +78,7 @@ Dashboard usage (high level):
 - Init/Status/Sync/Add .gitignore: same behavior as the CLI commands below
 - Merge: uses either Git conflict stages (recommended when you have a real `git` conflict) or a three-way merge with base/ours/theirs files
 - Sync/Publish: lets you import/export `.trae/rules` and `.trae/skills` using local folders or Git repos
+- Preset Sync Preview: run Preview, then use Select Conflicts / Select Clean/Auto, and Apply Selected
 
 ### init
 
@@ -219,4 +233,16 @@ They will be deployed into the target project's:
 ## Privacy note
 
 If you don't want to disclose your rules, add `.trae/` to your project's `.gitignore` (or use the `gitignore` command above).
+
+## Basic Extension (Prototype)
+
+The extension lives under [extension](file:///C:/MyProgram/Trae/extension) and is treated as a separate package during prototyping.
+
+Basic commands it provides:
+- Trae Rule: Setup (Init) Rules
+- Trae Rule: Status
+- Trae Rule: Sync (Copy Mode)
+- Trae Rule: Add .trae/ to .gitignore
+- Trae Rule: Open Dashboard
+- Trae Rule: Doctor
 

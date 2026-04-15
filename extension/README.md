@@ -1,24 +1,44 @@
-# Trae Rules & Skills Sync – Extension Dev Notes
+# Trae Rules & Skills Sync
+
+## Features
+
+- Conflict Detection (scan + click-to-locate + resolve-in-UI)
+- Token Analysis (cl100k_base tokens + cost estimation + suggestions)
+- Cross-platform export/import (Trae/Cursor/Cline/Windsurf/Copilot)
+- Cost control quick copy + onboarding tour
+
+## Screenshots
+
+![Token Analysis](media/tour-token.svg)
+
+![Conflict Detection](media/tour-conflict.svg)
+
+![Cross-Platform Export](media/tour-compile.svg)
+
+## Install (prototype)
+
+- Run in Extension Host: press `F5` from the main repo workspace.
+- Install VSIX (optional): `npm run package` then “Install from VSIX…” in Trae/VS Code.
 
 ## Quick test in Trae / VS Code
 
-1. Open this `extension/` folder as a workspace.
-2. Terminal → `npm install` (first time only).
-3. Press `F5` – a new Extension Host window opens.
-4. In that window open any project folder you want to receive rules/skills.
-5. Command Palette (`Ctrl/Cmd+Shift+P`) → run:
-   - `Trae: Sync Rules into Workspace`
-   - `Trae: Sync Skills into Workspace`
-   - `Trae: Publish Rules/Skills to Team Repo`
-   - `Trae: Resolve Merge Conflict`
-
-All commands show progress notifications and info/error messages.
+- Terminal (in `extension/`): `npm install`
+- Press `F5` (Extension Host)
+- Command Palette → try:
+  - `Trae: Scan Conflicts`
+  - `Trae: Analyze Tokens`
+  - `Trae: Export Rules to...`
+  - `Trae: Import Rules from...`
+  - `Trae: Sync All`
+  - `Trae: Copy Cost Control Rules`
 
 ## Build & package
 
 ```bash
-npm run compile      # TypeScript → JavaScript
-vsce package         # creates trae-rules-sync-0.1.0.vsix
+npm run compile
+npm run package
 ```
 
-Install the `.vsix` in Trae via Extensions view → “Install from VSIX…”
+## Dependency notes
+
+- `tiktoken` is used for token counting (cl100k_base).
