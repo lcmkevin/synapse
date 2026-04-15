@@ -149,8 +149,16 @@
 
         <div id="syncLocalFields">
           <div class="row">
-            <label class="label">Source Folder</label>
-            <input id="syncSourcePath" class="input" placeholder="e.g. C:\path\to\source (contains .trae/)" />
+            <label class="label">Select Folder for preview check</label>
+            <div class="inline" style="gap: 10px; width: 100%">
+              <input id="syncSourcePath" class="input" placeholder="e.g. C:\path\to\source (contains .trae/)" />
+              <button id="btnSyncBrowse" class="btn" title="Select Folder for preview check">Select</button>
+              <input id="syncSourcePicker" type="file" webkitdirectory directory multiple hidden />
+            </div>
+          </div>
+          <div class="row">
+            <div class="label"></div>
+            <div id="syncSourcePickedInfo" class="previewSummary"></div>
           </div>
         </div>
 
@@ -196,6 +204,39 @@
 
         <div class="buttons">
           <button id="btnPublish" class="btn">Publish</button>
+        </div>
+      </section>
+
+      <section class="panel" id="presetSyncPanel">
+        <div class="row between">
+          <div class="label">Preset Sync Preview</div>
+          <div class="inline">
+            <button id="btnPresetPreview" class="btn">Preview</button>
+            <button id="btnPresetSelectConflicts" class="btn small">Select Conflicts</button>
+            <button id="btnPresetSelectCleanAuto" class="btn small">Select Clean/Auto</button>
+            <button id="btnPresetApplySelected" class="btn primary">Apply Selected</button>
+          </div>
+        </div>
+        <div class="previewSummary" id="presetSummary"></div>
+        <div class="splitPane">
+          <div class="tableWrap">
+            <table class="table" id="presetTable">
+              <thead>
+                <tr>
+                  <th style="width: 34px"></th>
+                  <th style="width: 72px">Status</th>
+                  <th>Path</th>
+                  <th style="width: 160px">Action</th>
+                  <th style="width: 90px"></th>
+                </tr>
+              </thead>
+              <tbody id="presetBody"></tbody>
+            </table>
+          </div>
+          <div class="previewPane">
+            <div class="previewSummary" id="presetFileTitle">File Preview</div>
+            <pre id="presetFilePreview" class="output presetOutput"></pre>
+          </div>
         </div>
       </section>
     </div>

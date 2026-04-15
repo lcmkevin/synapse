@@ -669,6 +669,255 @@ async function mergeGitIndexConflict({ repoRoot, filePath, outPath, diff3, apply
   }
 }
 
+async function listFilesRecursivelyRel(rootDir) {
+  const absFiles = await listFilesRecursively(rootDir);
+  return absFiles.map((f) => toPosixPath(path.relative(rootDir, f)));
+}
+
+function isSafeRelPosix(relPosix) {
+  if (!relPosix || typeof relPosix !== "string") return false;
+  const norm = path.posix.normalize(relPosix).replace(/^(\.\/)+/, "");
+  if (!norm || norm === "." || norm.includes("\0")) return false;
+  if (path.posix.isAbsolute(norm)) return false;
+  if (norm.startsWith("..")) return false;
+  const parts = norm.split("/");
+  if (parts.some((p) => p === "..")) return false;
+  return true;
+}
+
+function safeJoinUnderRoot(root, relPosix) {
+  if (!isSafeRelPosix(relPosix)) return null;
+  const relFs = fromPosixPath(path.posix.normalize(relPosix).replace(/^(\.\/)+/, ""));
+  return resolveUnderRoot(root, relFs);
+}
+
+async function tryGetGitRoot(cwd) {
+  const res = await runProcess("git", ["rev-parse", "--show-toplevel"], cwd);
+  if (res.code !== 0) return null;
+  const root = (res.stdout || "").trim();
+  return root ? root : null;
+}
+
+async function tryGetGitHeadText(gitRoot, relPosix) {
+  const res = await runProcess("git", ["show", `HEAD:${relPosix}`], gitRoot);
+  if (res.code !== 0) return null;
+  return res.stdout;
+}
+
+function containsConflictMarkers(text) {
+  return String(text || "").includes("<<<<<<<") && String(text || "").includes("=======") && String(text || "").includes(">>>>>>>");
+}
+
+async function simulateMergeText({ baseText, oursText, theirsText, diff3 }) {
+  const tempDir = await fsp.mkdtemp(path.join(os.tmpdir(), "trae-preview-"));
+  const cleanup = async () => {
+    await fsp.rm(tempDir, { recursive: true, force: true });
+  };
+  try {
+    const basePath = path.join(tempDir, "base");
+    const oursPath = path.join(tempDir, "ours");
+    const theirsPath = path.join(tempDir, "theirs");
+    await Promise.all([
+      fsp.writeFile(basePath, String(baseText || ""), "utf8"),
+      fsp.writeFile(oursPath, String(oursText || ""), "utf8"),
+      fsp.writeFile(theirsPath, String(theirsText || ""), "utf8"),
+    ]);
+
+    const args = ["merge-file", "-p", "-L", "ours", "-L", "base", "-L", "theirs"];
+    if (diff3) args.push("--diff3");
+    args.push(oursPath, basePath, theirsPath);
+    const res = await runProcess("git", args, tempDir);
+    const mergedText = res.stdout;
+    const hadConflicts = res.code === 1 || containsConflictMarkers(mergedText);
+    if (res.code !== 0 && res.code !== 1) {
+      if (res.code === 2 && mergedText && containsConflictMarkers(mergedText)) {
+        return { mergedText, hadConflicts: true };
+      }
+      const msg = (res.stderr || res.stdout || "").trim() || "git merge-file failed";
+      throw new Error(msg);
+    }
+    return { mergedText, hadConflicts };
+  } finally {
+    await cleanup();
+  }
+}
+
+async function previewPresetSync({ targetRoot, upstreamRoot }) {
+  const targetAbs = normalizeTargetRoot(targetRoot);
+  const upstreamAbs = ensureAbsolute(upstreamRoot);
+
+  const gitRoot = await tryGetGitRoot(targetAbs);
+  const kinds = ["rules", "skills"];
+  const items = [];
+
+  for (const kind of kinds) {
+    const localDir = path.join(targetAbs, DEFAULT_TEMPLATE_SUBPATH, kind);
+    const upstreamDir = await resolveTraeSubdir(upstreamAbs, kind);
+
+    const localFiles = (await exists(localDir)) ? await listFilesRecursivelyRel(localDir) : [];
+    const upstreamFiles = (await exists(upstreamDir)) ? await listFilesRecursivelyRel(upstreamDir) : [];
+
+    const localSet = new Set(localFiles);
+    const upstreamSet = new Set(upstreamFiles);
+    const all = Array.from(new Set([...localFiles, ...upstreamFiles])).sort();
+
+    for (const relPosix of all) {
+      if (!isSafeRelPosix(relPosix)) continue;
+
+      const id = `${kind}:${relPosix}`;
+      const displayPath = `${DEFAULT_TEMPLATE_SUBPATH}/${kind}/${relPosix}`;
+      const localPath = localSet.has(relPosix) ? safeJoinUnderRoot(localDir, relPosix) : null;
+      const upstreamPath = upstreamSet.has(relPosix) ? safeJoinUnderRoot(upstreamDir, relPosix) : null;
+
+      if (!localPath && upstreamPath) {
+        items.push({ id, kind, relPosix, path: displayPath, status: "new-in-upstream" });
+        continue;
+      }
+
+      if (localPath && !upstreamPath) {
+        let status = "local-only";
+        if (gitRoot) {
+          const relFromGit = toPosixPath(path.relative(gitRoot, localPath));
+          if (!relFromGit.startsWith("..")) {
+            const headText = await tryGetGitHeadText(gitRoot, relFromGit);
+            if (headText !== null) status = "deleted-in-upstream";
+          }
+        }
+        items.push({ id, kind, relPosix, path: displayPath, status });
+        continue;
+      }
+
+      if (!localPath || !upstreamPath) continue;
+
+      const [oursText, theirsText] = await Promise.all([fsp.readFile(localPath, "utf8"), fsp.readFile(upstreamPath, "utf8")]);
+      if (oursText === theirsText) {
+        items.push({ id, kind, relPosix, path: displayPath, status: "clean" });
+        continue;
+      }
+
+      let baseText = "";
+      if (gitRoot) {
+        const relFromGit = toPosixPath(path.relative(gitRoot, localPath));
+        if (!relFromGit.startsWith("..")) {
+          const headText = await tryGetGitHeadText(gitRoot, relFromGit);
+          baseText = headText === null ? "" : headText;
+        }
+      }
+
+      const sim = await simulateMergeText({ baseText, oursText, theirsText });
+      items.push({ id, kind, relPosix, path: displayPath, status: sim.hadConflicts ? "conflict" : "auto-merged" });
+    }
+  }
+
+  return { items, gitRoot: gitRoot || null };
+}
+
+async function previewPresetFile({ targetRoot, upstreamRoot, kind, relPosix, diff3 }) {
+  const targetAbs = normalizeTargetRoot(targetRoot);
+  const upstreamAbs = ensureAbsolute(upstreamRoot);
+  if (kind !== "rules" && kind !== "skills") throw new Error("Invalid kind");
+  if (!isSafeRelPosix(relPosix)) throw new Error("Invalid path");
+
+  const gitRoot = await tryGetGitRoot(targetAbs);
+  const localDir = path.join(targetAbs, DEFAULT_TEMPLATE_SUBPATH, kind);
+  const upstreamDir = await resolveTraeSubdir(upstreamAbs, kind);
+
+  const localPath = (await exists(localDir)) ? safeJoinUnderRoot(localDir, relPosix) : null;
+  const upstreamPath = safeJoinUnderRoot(upstreamDir, relPosix);
+
+  const oursText = localPath && (await exists(localPath)) ? await fsp.readFile(localPath, "utf8") : null;
+  const theirsText = upstreamPath && (await exists(upstreamPath)) ? await fsp.readFile(upstreamPath, "utf8") : null;
+
+  let baseText = null;
+  if (gitRoot && localPath) {
+    const relFromGit = toPosixPath(path.relative(gitRoot, localPath));
+    if (!relFromGit.startsWith("..")) {
+      const headText = await tryGetGitHeadText(gitRoot, relFromGit);
+      baseText = headText === null ? null : headText;
+    }
+  }
+
+  let mergedText = null;
+  let hadConflicts = false;
+  if (oursText !== null && theirsText !== null) {
+    const sim = await simulateMergeText({ baseText: baseText === null ? "" : baseText, oursText, theirsText, diff3 });
+    mergedText = sim.mergedText;
+    hadConflicts = sim.hadConflicts;
+  }
+
+  return { oursText, theirsText, baseText, mergedText, hadConflicts };
+}
+
+async function applyPresetSync({ targetRoot, upstreamRoot, selections, diff3, confirmDelete }) {
+  const targetAbs = normalizeTargetRoot(targetRoot);
+  const upstreamAbs = ensureAbsolute(upstreamRoot);
+  const gitRoot = await tryGetGitRoot(targetAbs);
+
+  const applied = [];
+  const skipped = [];
+
+  for (const id of Array.isArray(selections) ? selections : []) {
+    if (typeof id !== "string") continue;
+    const idx = id.indexOf(":");
+    if (idx <= 0) continue;
+    const kind = id.slice(0, idx);
+    const relPosix = id.slice(idx + 1);
+    if (kind !== "rules" && kind !== "skills") continue;
+    if (!isSafeRelPosix(relPosix)) continue;
+
+    const localDir = path.join(targetAbs, DEFAULT_TEMPLATE_SUBPATH, kind);
+    const upstreamDir = await resolveTraeSubdir(upstreamAbs, kind);
+    const localPath = safeJoinUnderRoot(localDir, relPosix);
+    const upstreamPath = safeJoinUnderRoot(upstreamDir, relPosix);
+    if (!localPath || !upstreamPath) continue;
+
+    const localExists = await exists(localPath);
+    const upstreamExists = await exists(upstreamPath);
+
+    if (!localExists && upstreamExists) {
+      await copyFileWithDirs(upstreamPath, localPath);
+      applied.push({ id, action: "add" });
+      continue;
+    }
+
+    if (localExists && !upstreamExists) {
+      if (!confirmDelete) {
+        throw new Error("confirmDelete required to delete files.");
+      }
+      await fsp.rm(localPath, { force: true });
+      applied.push({ id, action: "delete" });
+      continue;
+    }
+
+    if (!localExists || !upstreamExists) {
+      skipped.push({ id, reason: "missing" });
+      continue;
+    }
+
+    const [oursText, theirsText] = await Promise.all([fsp.readFile(localPath, "utf8"), fsp.readFile(upstreamPath, "utf8")]);
+    if (oursText === theirsText) {
+      skipped.push({ id, reason: "clean" });
+      continue;
+    }
+
+    let baseText = "";
+    if (gitRoot) {
+      const relFromGit = toPosixPath(path.relative(gitRoot, localPath));
+      if (!relFromGit.startsWith("..")) {
+        const headText = await tryGetGitHeadText(gitRoot, relFromGit);
+        baseText = headText === null ? "" : headText;
+      }
+    }
+
+    const sim = await simulateMergeText({ baseText, oursText, theirsText, diff3 });
+    await ensureDir(path.dirname(localPath));
+    await fsp.writeFile(localPath, sim.mergedText, "utf8");
+    applied.push({ id, action: sim.hadConflicts ? "merge_conflict" : "merge" });
+  }
+
+  return { applied, skipped };
+}
+
 module.exports = {
   apiVersion: 1,
   DEFAULT_TEMPLATE_SUBPATH,
@@ -690,4 +939,7 @@ module.exports = {
   publishTraeToGit,
   mergeThreeWay,
   mergeGitIndexConflict,
+  previewPresetSync,
+  previewPresetFile,
+  applyPresetSync,
 };

@@ -5,11 +5,94 @@ const path = require("path");
 const fs = require("fs");
 const fsp = fs.promises;
 const { URL } = require("url");
+const childProcess = require("child_process");
+const os = require("os");
 
 const core = require("./core");
 
 const DEFAULT_TEMPLATE_ROOT = path.resolve(__dirname, "..", "Template");
 const PUBLIC_DIR = path.resolve(__dirname, "..", "public");
+
+const PREVIEW_SESSION_TTL_MS = 15 * 60 * 1000;
+const previewSessions = new Map();
+
+function randomId() {
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function prunePreviewSessions() {
+  const now = Date.now();
+  for (const [id, s] of previewSessions.entries()) {
+    if (!s || typeof s.createdAt !== "number" || now - s.createdAt > PREVIEW_SESSION_TTL_MS) {
+      previewSessions.delete(id);
+      if (s && typeof s.cleanup === "function") {
+        void s.cleanup().catch(() => void 0);
+      }
+    }
+  }
+}
+
+async function runProcess(cmd, args, cwd) {
+  return await new Promise((resolve, reject) => {
+    const child = childProcess.spawn(cmd, args, { cwd, windowsHide: true });
+    let stdout = "";
+    let stderr = "";
+    child.stdout.on("data", (b) => (stdout += b.toString("utf8")));
+    child.stderr.on("data", (b) => (stderr += b.toString("utf8")));
+    child.on("error", reject);
+    child.on("exit", (code) => resolve({ code: typeof code === "number" ? code : 1, stdout, stderr }));
+  });
+}
+
+async function gitCloneToTemp(repoUrl, branch) {
+  const parent = await fsp.mkdtemp(path.join(os.tmpdir(), "trae-preview-"));
+  const repoDir = path.join(parent, "repo");
+  const cleanup = async () => {
+    await fsp.rm(parent, { recursive: true, force: true });
+  };
+  const res = await runProcess("git", ["clone", "--depth", "1", "--branch", branch || "main", repoUrl, repoDir], parent);
+  if (res.code !== 0) {
+    await cleanup();
+    const msg = (res.stderr || res.stdout || "").trim() || "git clone failed";
+    throw new Error(msg);
+  }
+  return { repoDir, cleanup };
+}
+
+function normalizeRelPosix(p) {
+  const s = String(p || "").replace(/\\/g, "/");
+  const norm = path.posix.normalize(s).replace(/^(\.\/)+/, "");
+  if (!norm || norm === "." || norm.includes("\0")) return null;
+  if (path.posix.isAbsolute(norm)) return null;
+  if (norm.startsWith("..")) return null;
+  if (norm.split("/").some((part) => part === "..")) return null;
+  return norm;
+}
+
+async function writeUploadedFilesToTemp(files) {
+  const parent = await fsp.mkdtemp(path.join(os.tmpdir(), "trae-upload-"));
+  const cleanup = async () => {
+    await fsp.rm(parent, { recursive: true, force: true });
+  };
+
+  if (!Array.isArray(files)) {
+    await cleanup();
+    throw new Error("files must be an array");
+  }
+
+  for (const f of files) {
+    if (!f || typeof f !== "object") continue;
+    const rel = normalizeRelPosix(f.path);
+    if (!rel) continue;
+    const buf = Buffer.from(String(f.contentBase64 || ""), "base64");
+    const abs = path.join(parent, rel.split("/").join(path.sep));
+    const dir = path.dirname(abs);
+    await fsp.mkdir(dir, { recursive: true });
+    await fsp.writeFile(abs, buf);
+  }
+
+  return { upstreamRoot: parent, cleanup };
+}
 
 function send(res, statusCode, headers, body) {
   res.writeHead(statusCode, headers);
@@ -64,6 +147,8 @@ async function handleApi(req, res, url) {
   const projectPath = typeof body.projectPath === "string" ? body.projectPath : "";
   const targetRoot = core.normalizeTargetRoot(projectPath || process.cwd());
   const templateRoot = typeof body.templateRoot === "string" && body.templateRoot.trim() ? core.ensureAbsolute(body.templateRoot) : DEFAULT_TEMPLATE_ROOT;
+
+  prunePreviewSessions();
 
   if (url.pathname === "/api/init") {
     const mode = body.mode === "copy" ? "copy" : "symlink";
@@ -138,6 +223,18 @@ async function handleApi(req, res, url) {
     return sendJson(res, 200, { ok: true, result, events });
   }
 
+  if (url.pathname === "/api/syncRulesUpload") {
+    const overwrite = !!body.overwrite;
+    const files = body.files;
+    const { upstreamRoot, cleanup } = await writeUploadedFilesToTemp(files);
+    try {
+      const result = await core.syncTraeFolder({ sourceRoot: upstreamRoot, targetRoot, kind: "rules", overwrite });
+      return sendJson(res, 200, { ok: true, result });
+    } finally {
+      await cleanup().catch(() => void 0);
+    }
+  }
+
   if (url.pathname === "/api/syncSkills") {
     const overwrite = !!body.overwrite;
     const sourcePath = typeof body.sourcePath === "string" ? body.sourcePath : "";
@@ -155,6 +252,18 @@ async function handleApi(req, res, url) {
       result = await core.syncTraeFolder({ sourceRoot: core.ensureAbsolute(sourcePath.trim()), targetRoot, kind: "skills", overwrite });
     }
     return sendJson(res, 200, { ok: true, result, events });
+  }
+
+  if (url.pathname === "/api/syncSkillsUpload") {
+    const overwrite = !!body.overwrite;
+    const files = body.files;
+    const { upstreamRoot, cleanup } = await writeUploadedFilesToTemp(files);
+    try {
+      const result = await core.syncTraeFolder({ sourceRoot: upstreamRoot, targetRoot, kind: "skills", overwrite });
+      return sendJson(res, 200, { ok: true, result });
+    } finally {
+      await cleanup().catch(() => void 0);
+    }
   }
 
   if (url.pathname === "/api/publish") {
@@ -203,6 +312,79 @@ async function handleApi(req, res, url) {
       allowedRoot: targetRoot,
     });
     return sendJson(res, 200, { ok: true, result });
+  }
+
+  if (url.pathname === "/api/previewSync") {
+    const sourcePath = typeof body.sourcePath === "string" ? body.sourcePath : "";
+    const repoUrl = typeof body.repoUrl === "string" ? body.repoUrl : "";
+    const branch = typeof body.branch === "string" ? body.branch : "main";
+
+    let upstreamRoot = null;
+    let sessionId = null;
+
+    if (repoUrl && repoUrl.trim()) {
+      const { repoDir, cleanup } = await gitCloneToTemp(repoUrl.trim(), branch);
+
+      upstreamRoot = repoDir;
+      sessionId = randomId();
+      previewSessions.set(sessionId, { createdAt: Date.now(), upstreamRoot, cleanup, source: { repoUrl: repoUrl.trim(), branch } });
+    } else {
+      if (!sourcePath || !sourcePath.trim()) return sendJson(res, 400, { error: "sourcePath or repoUrl required" });
+      upstreamRoot = core.ensureAbsolute(sourcePath.trim());
+      sessionId = randomId();
+      previewSessions.set(sessionId, { createdAt: Date.now(), upstreamRoot, cleanup: null, source: { sourcePath: upstreamRoot } });
+    }
+
+    const result = await core.previewPresetSync({ targetRoot, upstreamRoot });
+    return sendJson(res, 200, { ok: true, sessionId, result });
+  }
+
+  if (url.pathname === "/api/previewSyncUpload") {
+    const files = body.files;
+    const { upstreamRoot, cleanup } = await writeUploadedFilesToTemp(files);
+    const sessionId = randomId();
+    previewSessions.set(sessionId, { createdAt: Date.now(), upstreamRoot, cleanup, source: { upload: true } });
+    const result = await core.previewPresetSync({ targetRoot, upstreamRoot });
+    return sendJson(res, 200, { ok: true, sessionId, result });
+  }
+
+  if (url.pathname === "/api/previewSyncFile") {
+    const sessionId = typeof body.sessionId === "string" ? body.sessionId : "";
+    const id = typeof body.id === "string" ? body.id : "";
+    const diff3 = !!body.diff3;
+    if (!sessionId || !previewSessions.has(sessionId)) return sendJson(res, 410, { error: "Preview session expired. Run Preview again." });
+    if (!id) return sendJson(res, 400, { error: "id required" });
+
+    const session = previewSessions.get(sessionId);
+    const idx = id.indexOf(":");
+    if (idx <= 0) return sendJson(res, 400, { error: "invalid id" });
+    const kind = id.slice(0, idx);
+    const relPosix = id.slice(idx + 1);
+
+    const result = await core.previewPresetFile({ targetRoot, upstreamRoot: session.upstreamRoot, kind, relPosix, diff3 });
+    return sendJson(res, 200, { ok: true, result });
+  }
+
+  if (url.pathname === "/api/previewSyncApply") {
+    const sessionId = typeof body.sessionId === "string" ? body.sessionId : "";
+    const selections = Array.isArray(body.selections) ? body.selections : [];
+    const confirmDelete = !!body.confirmDelete;
+    const diff3 = !!body.diff3;
+    if (!sessionId || !previewSessions.has(sessionId)) return sendJson(res, 410, { error: "Preview session expired. Run Preview again." });
+
+    const session = previewSessions.get(sessionId);
+    const result = await core.applyPresetSync({ targetRoot, upstreamRoot: session.upstreamRoot, selections, diff3, confirmDelete });
+    return sendJson(res, 200, { ok: true, result });
+  }
+
+  if (url.pathname === "/api/previewSyncClose") {
+    const sessionId = typeof body.sessionId === "string" ? body.sessionId : "";
+    if (sessionId && previewSessions.has(sessionId)) {
+      const s = previewSessions.get(sessionId);
+      previewSessions.delete(sessionId);
+      if (s && typeof s.cleanup === "function") await s.cleanup().catch(() => void 0);
+    }
+    return sendJson(res, 200, { ok: true });
   }
 
   return sendJson(res, 404, { error: "Not found" });

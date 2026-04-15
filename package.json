@@ -10,71 +10,13 @@
     "trae-template": "bin/trae-template.js",
     "trae-rule": "bin/trae-template.js"
   },
-  "main": "./out/extension.js",
+  "main": "./src/core.js",
   "exports": {
-    ".": "./out/extension.js",
-    "./core": "./src/core.js",
+    ".": "./src/core.js",
     "./cli": "./bin/trae-template.js"
-  },
-  "activationEvents": [
-    "onCommand:traeRule.setup",
-    "onCommand:traeRule.status",
-    "onCommand:traeRule.sync",
-    "onCommand:traeRule.gitignore",
-    "onCommand:traeRule.dashboard",
-    "onCommand:traeRule.doctor",
-    "onCommand:trae.syncRules",
-    "onCommand:trae.syncSkills",
-    "onCommand:trae.publishToTeam",
-    "onCommand:trae.mergeConflict"
-  ],
-  "contributes": {
-    "commands": [
-      {
-        "command": "traeRule.setup",
-        "title": "Trae Rule: Setup (Init) Rules"
-      },
-      {
-        "command": "traeRule.status",
-        "title": "Trae Rule: Status"
-      },
-      {
-        "command": "traeRule.sync",
-        "title": "Trae Rule: Sync (Copy Mode)"
-      },
-      {
-        "command": "traeRule.gitignore",
-        "title": "Trae Rule: Add .trae/ to .gitignore"
-      },
-      {
-        "command": "traeRule.dashboard",
-        "title": "Trae Rule: Open Dashboard"
-      },
-      {
-        "command": "traeRule.doctor",
-        "title": "Trae Rule: Doctor"
-      },
-      {
-        "command": "trae.syncRules",
-        "title": "Trae: Sync Rules into Workspace"
-      },
-      {
-        "command": "trae.syncSkills",
-        "title": "Trae: Sync Skills into Workspace"
-      },
-      {
-        "command": "trae.publishToTeam",
-        "title": "Trae: Publish Rules/Skills to Team Repo"
-      },
-      {
-        "command": "trae.mergeConflict",
-        "title": "Trae: Resolve Merge Conflict"
-      }
-    ]
   },
   "files": [
     "bin/",
-    "out/",
     "src/",
     "public/",
     "Template/",
@@ -83,18 +25,12 @@
   ],
   "scripts": {
     "cli": "node ./bin/trae-template.js help",
-    "dashboard": "node ./src/server.js",
-    "compile": "tsc -p .",
-    "watch": "tsc -watch -p .",
-    "vscode:prepublish": "npm run compile"
+    "dashboard": "node ./src/server.js"
   },
   "engines": {
-    "vscode": "^1.85.0",
     "node": ">=16.17.0"
   },
   "devDependencies": {
-    "@types/node": "^20.0.0",
-    "@types/vscode": "^1.85.0",
-    "typescript": "^5.3.0"
+    "@types/node": "^20.0.0"
   }
 }

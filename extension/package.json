@@ -8,16 +8,68 @@
   "engines": {
     "vscode": "^1.85.0"
   },
-  "categories": ["Other"],
+  "categories": [
+    "Other"
+  ],
+  "main": "./out/extension.js",
   "activationEvents": [
+    "onCommand:traeRule.setup",
+    "onCommand:traeRule.status",
+    "onCommand:traeRule.sync",
+    "onCommand:traeRule.gitignore",
+    "onCommand:traeRule.dashboard",
+    "onCommand:traeRule.doctor",
     "onCommand:trae.syncRules",
     "onCommand:trae.syncSkills",
     "onCommand:trae.publishToTeam",
-    "onCommand:trae.mergeConflict"
+    "onCommand:trae.mergeConflict",
+    "onCommand:trae.previewSync",
+    "onCommand:trae.conflictDetection.scan",
+    "onView:traeConflictDetectionView",
+    "onView:traeTokenAnalysisView",
+    "onCommand:trae.tokenAnalysis.refresh",
+    "onCommand:trae.tokenAnalysis.setRounds",
+    "onCommand:trae.tokenAnalysis.setCostThreshold",
+    "onCommand:trae.tokenAnalysis.convertRuleToSkill",
+    "onCommand:trae.costControl.copy",
+    "onCommand:trae.compiler.export",
+    "onCommand:trae.compiler.import",
+    "onCommand:trae.compiler.openSettings",
+    "onCommand:trae.compiler.syncAll",
+    "onCommand:trae.compiler.setDefaultTargetPlatform",
+    "onCommand:trae.compiler.toggleAutoSync",
+    "onCommand:trae.scanConflicts",
+    "onCommand:trae.analyzeTokens",
+    "onCommand:trae.exportToPlatform",
+    "onCommand:trae.syncAll",
+    "onCommand:trae.onboarding.open"
   ],
-  "main": "./out/extension.js",
   "contributes": {
     "commands": [
+      {
+        "command": "traeRule.setup",
+        "title": "Trae Rule: Setup (Init) Rules"
+      },
+      {
+        "command": "traeRule.status",
+        "title": "Trae Rule: Status"
+      },
+      {
+        "command": "traeRule.sync",
+        "title": "Trae Rule: Sync (Copy Mode)"
+      },
+      {
+        "command": "traeRule.gitignore",
+        "title": "Trae Rule: Add .trae/ to .gitignore"
+      },
+      {
+        "command": "traeRule.dashboard",
+        "title": "Trae Rule: Open Dashboard"
+      },
+      {
+        "command": "traeRule.doctor",
+        "title": "Trae Rule: Doctor"
+      },
       {
         "command": "trae.syncRules",
         "title": "Trae: Sync Rules into Workspace"
@@ -33,20 +85,258 @@
       {
         "command": "trae.mergeConflict",
         "title": "Trae: Resolve Merge Conflict"
+      },
+      {
+        "command": "trae.previewSync",
+        "title": "Trae: Preset Sync Preview"
+      },
+      {
+        "command": "trae.conflictDetection.scan",
+        "title": "Trae: Scan Rule Conflicts"
+      },
+      {
+        "command": "trae.conflictDetection.open",
+        "title": "Trae: Open Conflict Location"
+      },
+      {
+        "command": "trae.conflictDetection.resolve",
+        "title": "Trae: Resolve Conflict (UI Only)"
+      },
+      {
+        "command": "trae.tokenAnalysis.refresh",
+        "title": "Trae: Refresh Token Analysis"
+      },
+      {
+        "command": "trae.tokenAnalysis.setRounds",
+        "title": "Trae: Set Average Rounds Per Conversation"
+      },
+      {
+        "command": "trae.tokenAnalysis.setCostThreshold",
+        "title": "Trae: Set Token Cost Threshold"
+      },
+      {
+        "command": "trae.tokenAnalysis.convertRuleToSkill",
+        "title": "Trae: Convert Rule to Skill"
+      },
+      {
+        "command": "trae.costControl.copy",
+        "title": "Trae: Copy Cost Control Rules"
+      },
+      {
+        "command": "trae.compiler.export",
+        "title": "Trae: Export Rules to..."
+      },
+      {
+        "command": "trae.compiler.import",
+        "title": "Trae: Import Rules from..."
+      },
+      {
+        "command": "trae.compiler.openSettings",
+        "title": "Trae: Open Compiler Settings"
+      },
+      {
+        "command": "trae.compiler.syncAll",
+        "title": "Trae: Sync All Targets"
+      },
+      {
+        "command": "trae.compiler.setDefaultTargetPlatform",
+        "title": "Trae: Set Default Export Target"
+      },
+      {
+        "command": "trae.compiler.toggleAutoSync",
+        "title": "Trae: Toggle Auto-Sync Preference"
+      },
+      {
+        "command": "trae.scanConflicts",
+        "title": "Trae: Scan Conflicts"
+      },
+      {
+        "command": "trae.analyzeTokens",
+        "title": "Trae: Analyze Tokens"
+      },
+      {
+        "command": "trae.exportToPlatform",
+        "title": "Trae: Export to Platform"
+      },
+      {
+        "command": "trae.syncAll",
+        "title": "Trae: Sync All"
+      },
+      {
+        "command": "trae.onboarding.open",
+        "title": "Trae: Open Tour"
       }
-    ]
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "traeExtensionViews",
+          "title": "Trae",
+          "icon": "media/trae.svg"
+        }
+      ]
+    },
+    "views": {
+      "traeExtensionViews": [
+        {
+          "id": "traeConflictDetectionView",
+          "name": "Conflict Detection"
+        },
+        {
+          "id": "traeTokenAnalysisView",
+          "name": "Token Analysis"
+        }
+      ]
+    },
+    "menus": {
+      "view/title": [
+        {
+          "command": "trae.conflictDetection.scan",
+          "when": "view == traeConflictDetectionView",
+          "group": "navigation"
+        },
+        {
+          "command": "trae.tokenAnalysis.refresh",
+          "when": "view == traeTokenAnalysisView",
+          "group": "navigation"
+        },
+        {
+          "command": "trae.tokenAnalysis.setRounds",
+          "when": "view == traeTokenAnalysisView",
+          "group": "navigation"
+        },
+        {
+          "command": "trae.tokenAnalysis.setCostThreshold",
+          "when": "view == traeTokenAnalysisView",
+          "group": "navigation"
+        },
+        {
+          "command": "trae.compiler.openSettings",
+          "when": "view == traeTokenAnalysisView",
+          "group": "navigation"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "trae.conflictDetection.resolve",
+          "when": "viewItem == traeConflictItem",
+          "group": "inline"
+        },
+        {
+          "command": "trae.tokenAnalysis.convertRuleToSkill",
+          "when": "viewItem == traeTokenRuleItem",
+          "group": "inline"
+        }
+      ],
+      "explorer/context": [
+        {
+          "command": "trae.compiler.export",
+          "when": "resourceScheme == file",
+          "group": "navigation"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Trae Compiler",
+      "properties": {
+        "trae.compiler.defaultTargetPlatform": {
+          "type": "string",
+          "enum": [
+            "trae",
+            "cursor",
+            "cline",
+            "windsurf",
+            "copilot"
+          ],
+          "default": "cursor",
+          "description": "Default export target platform."
+        },
+        "trae.compiler.intermediatePath": {
+          "type": "string",
+          "default": ".trae/universal-rules.json",
+          "description": "Intermediate universal rules file path (relative to workspace)."
+        },
+        "trae.compiler.autoSync": {
+          "type": "boolean",
+          "default": false,
+          "description": "Auto-export to enabled targets when the intermediate file changes."
+        },
+        "trae.compiler.targets.cursor.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable export to Cursor (.cursorrules)."
+        },
+        "trae.compiler.targets.cursor.path": {
+          "type": "string",
+          "default": ".cursorrules",
+          "description": "Cursor rules output path (relative to workspace)."
+        },
+        "trae.compiler.targets.cline.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable export to Cline (.clinerules)."
+        },
+        "trae.compiler.targets.cline.path": {
+          "type": "string",
+          "default": ".clinerules",
+          "description": "Cline rules output path (relative to workspace)."
+        },
+        "trae.compiler.targets.windsurf.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable export to Windsurf (.windsurfrules)."
+        },
+        "trae.compiler.targets.windsurf.path": {
+          "type": "string",
+          "default": ".windsurfrules",
+          "description": "Windsurf rules output path (relative to workspace)."
+        },
+        "trae.compiler.targets.copilot.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable export to GitHub Copilot instructions (.github/copilot-instructions.md)."
+        },
+        "trae.compiler.targets.copilot.path": {
+          "type": "string",
+          "default": ".github/copilot-instructions.md",
+          "description": "Copilot instructions output path (relative to workspace)."
+        },
+        "trae.tokenAnalysis.tokensThreshold": {
+          "type": "number",
+          "default": 2000,
+          "description": "Warn when total tokens exceed this threshold."
+        },
+        "trae.tokenAnalysis.costThresholdUsd": {
+          "type": "number",
+          "default": 0.2,
+          "description": "Warn when estimated cost (USD) exceeds this threshold."
+        },
+        "trae.telemetry.enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable anonymous feature usage telemetry (no code content)."
+        },
+        "trae.telemetry.endpoint": {
+          "type": "string",
+          "default": "",
+          "description": "Telemetry server endpoint (HTTPS)."
+        }
+      }
+    }
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",
     "compile": "tsc -p ./",
-    "watch": "tsc -watch -p ./"
+    "watch": "tsc -watch -p ./",
+    "package": "npx --yes @vscode/vsce@2.26.0 package --out trae-rules-sync.vsix"
   },
   "devDependencies": {
+    "@types/node": "^20.0.0",
     "@types/vscode": "^1.85.0",
-    "@types/node": "^20.x",
     "typescript": "^5.3.0"
   },
   "dependencies": {
-    "@core": "file:../src"
+    "tiktoken": "^1.0.11",
+    "trae-template-deployer": "file:.."
   }
 }

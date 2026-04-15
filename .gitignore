@@ -6,3 +6,7 @@ pnpm-debug.log*
 .DS_Store
 Thumbs.db
 .trae/
+
+# Keep the extension private/out of the open-source repo
+extension/
+PAID_EXTENSION_FEATURES.md
