@@ -76,6 +76,25 @@ function createLogger({ quiet, verbose, logFile }) {
   };
 }
 
+// NEW:
+function colorize(text, color) {
+  if (!isTty()) return String(text);
+  const code =
+    color === "green"
+      ? "\x1b[32m"
+      : color === "yellow"
+      ? "\x1b[33m"
+      : color === "red"
+      ? "\x1b[31m"
+      : color === "cyan"
+      ? "\x1b[36m"
+      : color === "gray"
+      ? "\x1b[90m"
+      : "";
+  const reset = "\x1b[0m";
+  return code ? `${code}${String(text)}${reset}` : String(text);
+}
+
 function createProgress(total, logger) {
   if (!isTty() || logger.isVerbose || logger.isQuiet) {
     return {
@@ -143,6 +162,7 @@ function printHelp() {
       `  ${t} init [projectPath] [--copy|--symlink] [--force] [--backup] [--dry-run] [--template-root=PATH] [--interactive]`,
       `  ${t} status [projectPath] [--template-root=PATH]`,
       `  ${t} sync [projectPath] [--force] [--backup] [--dry-run] [--template-root=PATH]`,
+      `  ${t} watch [projectPath] [--force] [--backup] [--dry-run] [--template-root=PATH]`,
       `  ${t} gitignore [projectPath] [--dry-run]`,
       `  ${t} sync-rules [projectPath] [--from=PATH|--repo=URL] [--branch=main] [--overwrite] [--interactive]`,
       `  ${t} sync-skills [projectPath] [--from=PATH|--repo=URL] [--branch=main] [--overwrite] [--interactive]`,
@@ -375,6 +395,141 @@ async function syncCommand({ templateRoot, targetRoot, force, backup, dryRun, lo
   }
 }
 
+// NEW:
+async function watchCommand({ templateRoot, targetRoot, force, backup, dryRun, logger }) {
+  const watchRoots = [];
+  if (templateRoot && (await exists(templateRoot))) watchRoots.push(templateRoot);
+  if (targetRoot && (await exists(targetRoot))) watchRoots.push(targetRoot);
+  const uniqueRoots = Array.from(new Set(watchRoots.map((p) => path.resolve(p))));
+  if (uniqueRoots.length === 0) throw new Error("Nothing to watch: template root and target root were not found.");
+
+  const isIgnored = (p) => {
+    const lower = String(p || "").toLowerCase();
+    return lower.includes(`${path.sep}node_modules${path.sep}`) || lower.includes(`${path.sep}.git${path.sep}`);
+  };
+  const matches = (p) => {
+    const lower = String(p || "").toLowerCase();
+    return (lower.endsWith(".trae") || lower.endsWith(".rule")) && !isIgnored(lower);
+  };
+
+  const pending = new Set();
+  let debounceTimer = null;
+  let running = false;
+  let rerun = false;
+
+  const schedule = () => {
+    if (debounceTimer) clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(async () => {
+      if (running) {
+        rerun = true;
+        return;
+      }
+      running = true;
+      const changed = Array.from(pending.values());
+      pending.clear();
+      logger.info(colorize(`Detected ${changed.length} change(s). Running sync...`, "cyan"));
+      try {
+        await syncCommand({ templateRoot, targetRoot, force, backup, dryRun, logger });
+        logger.info(colorize(`Sync complete (${new Date().toLocaleTimeString()}).`, "green"));
+      } catch (e) {
+        logger.error(colorize(`Sync failed: ${e && e.message ? e.message : String(e)}`, "red"));
+      } finally {
+        running = false;
+        if (rerun) {
+          rerun = false;
+          schedule();
+        }
+      }
+    }, 500);
+  };
+
+  const onFsEvent = (root, filename) => {
+    if (!filename) {
+      pending.add("(unknown file)");
+      schedule();
+      return;
+    }
+    const abs = path.resolve(root, filename);
+    if (!matches(abs)) return;
+    const rel = path.relative(root, abs) || abs;
+    pending.add(rel.split(path.sep).join(path.posix.sep));
+    logger.info(colorize(`Change detected: ${rel}`, "yellow"));
+    schedule();
+  };
+
+  const watchers = [];
+  let usingPolling = false;
+  for (const root of uniqueRoots) {
+    try {
+      const w = fs.watch(root, { recursive: true }, (eventType, filename) => onFsEvent(root, filename));
+      watchers.push(w);
+      logger.info(colorize(`Watching: ${root}`, "gray"));
+    } catch {
+      usingPolling = true;
+      logger.warn(colorize(`fs.watch recursive not available for ${root}; falling back to polling.`, "yellow"));
+    }
+  }
+
+  let pollTimer = null;
+  let snapshot = new Map();
+
+  async function scanRec(dir, out) {
+    const entries = await fsp.readdir(dir, { withFileTypes: true }).catch(() => []);
+    for (const ent of entries) {
+      const full = path.join(dir, ent.name);
+      if (isIgnored(full)) continue;
+      if (ent.isDirectory()) await scanRec(full, out);
+      else if (ent.isFile()) {
+        if (!matches(full)) continue;
+        const st = await fsp.stat(full).catch(() => null);
+        if (st) out.set(full, st.mtimeMs);
+      }
+    }
+  }
+
+  async function buildSnapshot() {
+    const next = new Map();
+    for (const root of uniqueRoots) {
+      await scanRec(root, next);
+    }
+    return next;
+  }
+
+  if (usingPolling) {
+    snapshot = await buildSnapshot();
+    pollTimer = setInterval(async () => {
+      const next = await buildSnapshot();
+      for (const [p, m] of next.entries()) {
+        const prev = snapshot.get(p);
+        if (prev === undefined || prev !== m) {
+          pending.add(p);
+        }
+      }
+      snapshot = next;
+      if (pending.size) schedule();
+    }, 500);
+    logger.info(colorize(`Watching via polling (${uniqueRoots.length} root(s)).`, "gray"));
+  }
+
+  logger.info(colorize("Press Ctrl+C to stop watching.", "gray"));
+
+  const cleanup = () => {
+    try {
+      for (const w of watchers) w.close();
+    } catch {
+      // ignore
+    }
+    if (pollTimer) clearInterval(pollTimer);
+    if (debounceTimer) clearTimeout(debounceTimer);
+  };
+
+  process.on("SIGINT", () => {
+    cleanup();
+    process.stdout.write("\n");
+    process.exit(0);
+  });
+}
+
 async function gitignoreCommand({ targetRoot, dryRun, logger }) {
   if (!(await exists(targetRoot))) {
     if (!dryRun) {
@@ -551,6 +706,10 @@ async function main() {
   }
   if (cmd === "sync") {
     await syncCommand({ templateRoot, targetRoot, force, backup, dryRun, logger });
+    return;
+  }
+  if (cmd === "watch") {
+    await watchCommand({ templateRoot, targetRoot, force, backup, dryRun, logger });
     return;
   }
   if (cmd === "gitignore") {

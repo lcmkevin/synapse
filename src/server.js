@@ -5,6 +5,7 @@ const path = require("path");
 const fs = require("fs");
 const fsp = fs.promises;
 const { URL } = require("url");
+const crypto = require("crypto"); // NEW:
 const childProcess = require("child_process");
 const os = require("os");
 
@@ -15,6 +16,88 @@ const PUBLIC_DIR = path.resolve(__dirname, "..", "public");
 
 const PREVIEW_SESSION_TTL_MS = 15 * 60 * 1000;
 const previewSessions = new Map();
+
+// NEW: minimal WebSocket broadcast for sync status (no external deps)
+const wsSyncClients = new Set();
+let lastSyncStatus = null;
+
+function wsAcceptKey(key) {
+  const GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
+  return crypto.createHash("sha1").update(String(key) + GUID, "binary").digest("base64");
+}
+
+function wsSendText(socket, text) {
+  const payload = Buffer.from(String(text), "utf8");
+  const len = payload.length;
+  let header;
+  if (len < 126) {
+    header = Buffer.from([0x81, len]);
+  } else if (len < 65536) {
+    header = Buffer.from([0x81, 126, (len >> 8) & 255, len & 255]);
+  } else {
+    const b = Buffer.alloc(10);
+    b[0] = 0x81;
+    b[1] = 127;
+    b.writeBigUInt64BE(BigInt(len), 2);
+    header = b;
+  }
+  socket.write(Buffer.concat([header, payload]));
+}
+
+function broadcastSyncStatus(payload) {
+  lastSyncStatus = payload;
+  const text = JSON.stringify(payload);
+  for (const sock of Array.from(wsSyncClients)) {
+    try {
+      if (!sock || sock.destroyed) {
+        wsSyncClients.delete(sock);
+        continue;
+      }
+      wsSendText(sock, text);
+    } catch {
+      wsSyncClients.delete(sock);
+      try {
+        sock.destroy();
+      } catch {
+        void 0;
+      }
+    }
+  }
+}
+
+function handleWsUpgrade(req, socket) {
+  try {
+    const url = new URL(req.url, "http://localhost");
+    if (url.pathname !== "/ws/sync-status") return false;
+    const key = req.headers["sec-websocket-key"];
+    if (!key) return false;
+    const accept = wsAcceptKey(key);
+    socket.write(
+      [
+        "HTTP/1.1 101 Switching Protocols",
+        "Upgrade: websocket",
+        "Connection: Upgrade",
+        `Sec-WebSocket-Accept: ${accept}`,
+        "",
+        "",
+      ].join("\r\n")
+    );
+    wsSyncClients.add(socket);
+    socket.on("close", () => wsSyncClients.delete(socket));
+    socket.on("end", () => wsSyncClients.delete(socket));
+    socket.on("error", () => wsSyncClients.delete(socket));
+    if (lastSyncStatus) {
+      try {
+        wsSendText(socket, JSON.stringify(lastSyncStatus));
+      } catch {
+        void 0;
+      }
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 function randomId() {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
@@ -42,6 +125,44 @@ async function runProcess(cmd, args, cwd) {
     child.on("error", reject);
     child.on("exit", (code) => resolve({ code: typeof code === "number" ? code : 1, stdout, stderr }));
   });
+}
+
+async function pickFolderDialogWin32(initialPath, title) {
+  if (process.platform !== "win32") {
+    throw new Error("Folder picker is only supported on Windows.");
+  }
+
+  const desc = typeof title === "string" && title.trim() ? title.trim().slice(0, 120) : "Select Folder";
+  const script = [
+    "Add-Type -AssemblyName System.Windows.Forms",
+    "$form = New-Object System.Windows.Forms.Form",
+    "$form.TopMost = $true",
+    "$form.StartPosition = 'CenterScreen'",
+    "$form.ShowInTaskbar = $false",
+    "$form.Opacity = 0",
+    "$null = $form.Show()",
+    "$null = $form.Activate()",
+    "$dlg = New-Object System.Windows.Forms.FolderBrowserDialog",
+    `$dlg.Description = '${desc.replace(/'/g, "''")}'`,
+    "$dlg.ShowNewFolderButton = $false",
+    "$initial = $args[0]",
+    "if ($initial -and (Test-Path -LiteralPath $initial)) { $dlg.SelectedPath = $initial }",
+    "$null = $dlg.ShowDialog($form)",
+    "$form.Close()",
+    "if ($dlg.SelectedPath) { Write-Output $dlg.SelectedPath }",
+  ].join('; ');
+
+  const init = typeof initialPath === "string" ? initialPath.trim() : "";
+  const res = await runProcess(
+    "powershell.exe",
+    ["-NoProfile", "-STA", "-ExecutionPolicy", "Bypass", "-Command", script, init], // NEW:
+    process.cwd()
+  );
+  if (res.code !== 0) {
+    const msg = (res.stderr || res.stdout || "").trim() || "Folder picker failed.";
+    throw new Error(msg);
+  }
+  return (res.stdout || "").trim();
 }
 
 async function gitCloneToTemp(repoUrl, branch) {
@@ -150,6 +271,13 @@ async function handleApi(req, res, url) {
 
   prunePreviewSessions();
 
+  if (url.pathname === "/api/pickFolder") {
+    const initialPath = typeof body.initialPath === "string" ? body.initialPath : "";
+    const title = typeof body.title === "string" ? body.title : "";
+    const pickedPath = await pickFolderDialogWin32(initialPath, title);
+    return sendJson(res, 200, { ok: true, result: { path: pickedPath } });
+  }
+
   if (url.pathname === "/api/init") {
     const mode = body.mode === "copy" ? "copy" : "symlink";
     const force = !!body.force;
@@ -187,15 +315,21 @@ async function handleApi(req, res, url) {
     const dryRun = !!body.dryRun;
 
     const events = [];
-    const result = await core.syncCopy({
-      templateRoot,
-      targetRoot,
-      force,
-      backup,
-      dryRun,
-      onProgress: (e) => events.push(e),
-    });
-    return sendJson(res, 200, { ok: true, result, events });
+    try {
+      const result = await core.syncCopy({
+        templateRoot,
+        targetRoot,
+        force,
+        backup,
+        dryRun,
+        onProgress: (e) => events.push(e),
+      });
+      broadcastSyncStatus({ ok: true, at: Date.now(), kind: "sync", dryRun: !!dryRun, targetRoot, templateRoot }); // NEW:
+      return sendJson(res, 200, { ok: true, result, events });
+    } catch (e) {
+      broadcastSyncStatus({ ok: false, at: Date.now(), kind: "sync", dryRun: !!dryRun, targetRoot, templateRoot, error: e && e.message ? e.message : String(e) }); // NEW:
+      throw e;
+    }
   }
 
   if (url.pathname === "/api/gitignore") {
@@ -420,6 +554,16 @@ const portNum = Number(portRaw);
 const port = Number.isFinite(portNum) && portNum >= 0 ? portNum : 5177;
 
 const server = http.createServer((req, res) => void handleRequest(req, res));
+server.on("upgrade", (req, socket) => { // NEW:
+  const ok = handleWsUpgrade(req, socket);
+  if (!ok) {
+    try {
+      socket.destroy();
+    } catch {
+      void 0;
+    }
+  }
+});
 server.on("error", (err) => {
   if (err && err.code === "EADDRINUSE") {
     process.stderr.write(`Port ${port} is already in use. Try: node ./bin/trae-template.js dashboard --port=5178\n`);

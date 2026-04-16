@@ -9,7 +9,14 @@
   <body>
     <div class="container">
       <header class="header">
-        <h1>Trae Rule Dashboard</h1>
+        <div class="headerRow">
+          <h1>Trae Rule Dashboard</h1>
+          <!-- NEW: sync status indicator -->
+          <div class="syncStatus" title="Sync status: unknown">
+            <span id="syncDot" class="syncDot syncDot--unknown"></span>
+            <span id="syncLabel" class="syncLabel">Sync: unknown</span>
+          </div>
+        </div>
         <div class="sub">Deploy and manage .trae rules in projects</div>
       </header>
 

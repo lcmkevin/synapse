@@ -487,14 +487,20 @@ async function runProcess(cmd, args, cwd) {
 }
 
 async function resolveTraeSubdir(sourceRoot, kind) {
+  const base = path.basename(sourceRoot);
+  if (base === DEFAULT_TEMPLATE_SUBPATH) {
+    const inTrae = path.join(sourceRoot, kind);
+    if (await exists(inTrae)) return inTrae;
+  }
+
   const dotTrae = path.join(sourceRoot, DEFAULT_TEMPLATE_SUBPATH, kind);
   if (await exists(dotTrae)) return dotTrae;
 
   const direct = path.join(sourceRoot, kind);
   if (await exists(direct)) return direct;
 
-  if (await exists(sourceRoot)) return sourceRoot;
-  throw new Error(`Source folder not found: ${sourceRoot}`);
+  if (!(await exists(sourceRoot))) throw new Error(`Source folder not found: ${sourceRoot}`);
+  throw new Error(`Source folder does not contain ${DEFAULT_TEMPLATE_SUBPATH}/${kind} or ${kind}/: ${sourceRoot}`);
 }
 
 async function copyDirTree({ srcDir, destDir, overwrite }) {
@@ -752,10 +758,15 @@ async function previewPresetSync({ targetRoot, upstreamRoot }) {
 
   for (const kind of kinds) {
     const localDir = path.join(targetAbs, DEFAULT_TEMPLATE_SUBPATH, kind);
-    const upstreamDir = await resolveTraeSubdir(upstreamAbs, kind);
+    let upstreamDir = null;
+    try {
+      upstreamDir = await resolveTraeSubdir(upstreamAbs, kind);
+    } catch {
+      upstreamDir = null;
+    }
 
     const localFiles = (await exists(localDir)) ? await listFilesRecursivelyRel(localDir) : [];
-    const upstreamFiles = (await exists(upstreamDir)) ? await listFilesRecursivelyRel(upstreamDir) : [];
+    const upstreamFiles = upstreamDir && (await exists(upstreamDir)) ? await listFilesRecursivelyRel(upstreamDir) : [];
 
     const localSet = new Set(localFiles);
     const upstreamSet = new Set(upstreamFiles);
@@ -767,7 +778,7 @@ async function previewPresetSync({ targetRoot, upstreamRoot }) {
       const id = `${kind}:${relPosix}`;
       const displayPath = `${DEFAULT_TEMPLATE_SUBPATH}/${kind}/${relPosix}`;
       const localPath = localSet.has(relPosix) ? safeJoinUnderRoot(localDir, relPosix) : null;
-      const upstreamPath = upstreamSet.has(relPosix) ? safeJoinUnderRoot(upstreamDir, relPosix) : null;
+      const upstreamPath = upstreamDir && upstreamSet.has(relPosix) ? safeJoinUnderRoot(upstreamDir, relPosix) : null;
 
       if (!localPath && upstreamPath) {
         items.push({ id, kind, relPosix, path: displayPath, status: "new-in-upstream" });
@@ -820,10 +831,15 @@ async function previewPresetFile({ targetRoot, upstreamRoot, kind, relPosix, dif
 
   const gitRoot = await tryGetGitRoot(targetAbs);
   const localDir = path.join(targetAbs, DEFAULT_TEMPLATE_SUBPATH, kind);
-  const upstreamDir = await resolveTraeSubdir(upstreamAbs, kind);
+  let upstreamDir = null;
+  try {
+    upstreamDir = await resolveTraeSubdir(upstreamAbs, kind);
+  } catch {
+    upstreamDir = null;
+  }
 
   const localPath = (await exists(localDir)) ? safeJoinUnderRoot(localDir, relPosix) : null;
-  const upstreamPath = safeJoinUnderRoot(upstreamDir, relPosix);
+  const upstreamPath = upstreamDir ? safeJoinUnderRoot(upstreamDir, relPosix) : null;
 
   const oursText = localPath && (await exists(localPath)) ? await fsp.readFile(localPath, "utf8") : null;
   const theirsText = upstreamPath && (await exists(upstreamPath)) ? await fsp.readFile(upstreamPath, "utf8") : null;
@@ -866,7 +882,13 @@ async function applyPresetSync({ targetRoot, upstreamRoot, selections, diff3, co
     if (!isSafeRelPosix(relPosix)) continue;
 
     const localDir = path.join(targetAbs, DEFAULT_TEMPLATE_SUBPATH, kind);
-    const upstreamDir = await resolveTraeSubdir(upstreamAbs, kind);
+    let upstreamDir = null;
+    try {
+      upstreamDir = await resolveTraeSubdir(upstreamAbs, kind);
+    } catch {
+      skipped.push({ id, reason: "no_upstream_kind" });
+      continue;
+    }
     const localPath = safeJoinUnderRoot(localDir, relPosix);
     const upstreamPath = safeJoinUnderRoot(upstreamDir, relPosix);
     if (!localPath || !upstreamPath) continue;
