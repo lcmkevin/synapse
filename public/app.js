@@ -290,6 +290,41 @@ async function pickLocalFolderFiles(fileList) {
   return { name, files: encoded };
 }
 
+async function pickLocalFolderFromDirectoryHandle(dirHandle) {
+  const folderName = dirHandle && dirHandle.name ? String(dirHandle.name) : "folder";
+  const kept = [];
+
+  const walk = async (handle, relParts) => {
+    for await (const entry of handle.values()) {
+      if (entry.kind === "directory") {
+        await walk(entry, [...relParts, entry.name]);
+        continue;
+      }
+      if (entry.kind !== "file") continue;
+      const relPosix = [...relParts, entry.name].join("/").replace(/\\/g, "/");
+      const posix = `${folderName}/${relPosix}`;
+      const isTrae =
+        posix.includes("/.trae/rules/") ||
+        posix.includes("/.trae/skills/") ||
+        posix.startsWith(".trae/rules/") ||
+        posix.startsWith(".trae/skills/");
+      const isDirect = posix.includes("/rules/") || posix.includes("/skills/") || posix.startsWith("rules/") || posix.startsWith("skills/");
+      if (!isTrae && !isDirect) continue;
+      const file = await entry.getFile();
+      kept.push({ file, relPosix: posix });
+    }
+  };
+
+  await walk(dirHandle, []);
+
+  const encoded = [];
+  for (const it of kept) {
+    const contentBase64 = await fileToBase64(it.file);
+    encoded.push({ path: it.relPosix, contentBase64 });
+  }
+  return { name: folderName, files: encoded };
+}
+
 function statusIcon(status) {
   if (status === "clean") return "✅";
   if (status === "auto-merged") return "⚠️";
@@ -442,6 +477,63 @@ window.addEventListener("DOMContentLoaded", async () => {
   const sourcePathEl = $("syncSourcePath");
   const defaultSourcePlaceholder = sourcePathEl ? sourcePathEl.getAttribute("placeholder") || "" : "";
 
+  // NEW: real-time sync status indicator via WebSocket
+  const syncDot = $("syncDot");
+  const syncLabel = $("syncLabel");
+  const syncWrap = document.querySelector(".syncStatus");
+  function setSyncUi(kind, at, errText) {
+    if (!syncDot || !syncLabel) return;
+    syncDot.classList.remove("syncDot--ok", "syncDot--fail", "syncDot--warn", "syncDot--unknown");
+    const when = typeof at === "number" ? new Date(at).toLocaleString() : "unknown";
+    if (kind === "ok") {
+      syncDot.classList.add("syncDot--ok");
+      syncLabel.textContent = "Sync: ok";
+      if (syncWrap) syncWrap.title = `Last sync: ok • ${when}`;
+      return;
+    }
+    if (kind === "fail") {
+      syncDot.classList.add("syncDot--fail");
+      syncLabel.textContent = "Sync: fail";
+      const extra = errText ? ` • ${String(errText).slice(0, 120)}` : "";
+      if (syncWrap) syncWrap.title = `Last sync: fail • ${when}${extra}`;
+      return;
+    }
+    if (kind === "warn") {
+      syncDot.classList.add("syncDot--warn");
+      syncLabel.textContent = "Sync: disconnected";
+      if (syncWrap) syncWrap.title = "Sync status: disconnected";
+      return;
+    }
+    syncDot.classList.add("syncDot--unknown");
+    syncLabel.textContent = "Sync: unknown";
+    if (syncWrap) syncWrap.title = "Sync status: unknown";
+  }
+
+  function connectSyncWs() {
+    try {
+      const wsUrl = `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws/sync-status`;
+      const ws = new WebSocket(wsUrl);
+      setSyncUi("warn");
+      ws.addEventListener("open", () => setSyncUi("warn"));
+      ws.addEventListener("close", () => setSyncUi("warn"));
+      ws.addEventListener("error", () => setSyncUi("warn"));
+      ws.addEventListener("message", (ev) => {
+        try {
+          const data = JSON.parse(String(ev.data || ""));
+          if (data && data.kind === "sync") {
+            setSyncUi(data.ok ? "ok" : "fail", data.at, data.error || "");
+          }
+        } catch {
+          void 0;
+        }
+      });
+    } catch {
+      setSyncUi("warn");
+    }
+  }
+
+  connectSyncWs();
+
   const persisted = loadState();
   if (persisted) {
     if (typeof persisted.projectPath === "string") $("projectPath").value = persisted.projectPath;
@@ -515,6 +607,7 @@ window.addEventListener("DOMContentLoaded", async () => {
   $("btnSync").addEventListener("click", () => run("sync", () => postJson("/api/sync", payload())));
   $("btnGitignore").addEventListener("click", () => run("gitignore", () => postJson("/api/gitignore", payload())));
   $("btnMerge").addEventListener("click", () => run("merge", () => postJson("/api/merge", mergePayload())));
+
   $("btnSyncRules").addEventListener("click", () =>
     run("syncRules", () => {
       const base = syncPayloadBase();
@@ -522,7 +615,7 @@ window.addEventListener("DOMContentLoaded", async () => {
         return postJson("/api/syncRulesUpload", { projectPath: base.projectPath, overwrite: base.overwrite, files: uploadedLocalFolder.files });
       }
       if (getSyncSourceMode() === "local" && !base.sourcePath) {
-        throw new Error("Select a source folder: click Browse (recommended) or type a folder path.");
+        throw new Error("Select a source folder: click Select (recommended) or type a folder path.");
       }
       return postJson("/api/syncRules", base);
     })
@@ -534,7 +627,7 @@ window.addEventListener("DOMContentLoaded", async () => {
         return postJson("/api/syncSkillsUpload", { projectPath: base.projectPath, overwrite: base.overwrite, files: uploadedLocalFolder.files });
       }
       if (getSyncSourceMode() === "local" && !base.sourcePath) {
-        throw new Error("Select a source folder: click Browse (recommended) or type a folder path.");
+        throw new Error("Select a source folder: click Select (recommended) or type a folder path.");
       }
       return postJson("/api/syncSkills", base);
     })
@@ -542,7 +635,25 @@ window.addEventListener("DOMContentLoaded", async () => {
   $("btnPublish").addEventListener("click", () => run("publish", () => postJson("/api/publish", publishPayload())));
 
   $("btnSyncBrowse").addEventListener("click", () => {
-    $("syncSourcePicker").click();
+    try {
+      const picker = $("syncSourcePicker");
+      if (picker) picker.value = "";
+    } catch {
+      void 0;
+    }
+    void run("pickLocalPresetFolder", async () => {
+      const initialPath = $("syncSourcePath").value.trim();
+      const res = await postJson("/api/pickFolder", { projectPath: $("projectPath").value.trim(), initialPath, title: "Select Source Folder" });
+      const picked = res && res.result && typeof res.result.path === "string" ? res.result.path.trim() : "";
+      if (!picked) return { ok: true, picked: false };
+      uploadedLocalFolder = null;
+      $("syncSourcePickedInfo").textContent = `Selected: ${picked}`;
+      $("syncSourcePickedInfo").title = picked;
+      $("syncSourcePath").value = picked;
+      if (defaultSourcePlaceholder) $("syncSourcePath").placeholder = defaultSourcePlaceholder;
+      saveState();
+      return { ok: true, picked: true };
+    });
   });
   $("syncSourcePicker").addEventListener("change", async (e) => {
     const input = e.target;
@@ -551,14 +662,17 @@ window.addEventListener("DOMContentLoaded", async () => {
     await run("pickLocalPresetFolder", async () => {
       uploadedLocalFolder = await pickLocalFolderFiles(list);
       const folderName = uploadedLocalFolder && uploadedLocalFolder.files && uploadedLocalFolder.files[0] && uploadedLocalFolder.files[0].path ? String(uploadedLocalFolder.files[0].path).split("/")[0] : "folder";
-      $("syncSourcePickedInfo").textContent = "";
-      if (defaultSourcePlaceholder) {
-        $("syncSourcePath").value = "";
-        $("syncSourcePath").placeholder = `Selected: ${folderName} (${uploadedLocalFolder.files.length} files)`;
-      }
+      $("syncSourcePickedInfo").textContent = `Selected: ${folderName} (${uploadedLocalFolder.files.length} files)`;
+      $("syncSourcePath").value = folderName;
+      if (defaultSourcePlaceholder) $("syncSourcePath").placeholder = defaultSourcePlaceholder;
       saveState();
       return { ok: true, files: uploadedLocalFolder.files.length };
     });
+    try {
+      input.value = "";
+    } catch {
+      void 0;
+    }
   });
   $("btnPresetPreview").addEventListener("click", async () => {
     await closePresetSession();
@@ -568,7 +682,7 @@ window.addEventListener("DOMContentLoaded", async () => {
         return postJson("/api/previewSyncUpload", { projectPath: base.projectPath, files: uploadedLocalFolder.files });
       }
       if (getSyncSourceMode() === "local" && !base.sourcePath) {
-        throw new Error("Select a source folder: click Browse (recommended) or type a folder path.");
+        throw new Error("Select a source folder: click Select (recommended) or type a folder path.");
       }
       return postJson("/api/previewSync", base);
     });

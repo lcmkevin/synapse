@@ -30,6 +30,51 @@ body {
   letter-spacing: 0.2px;
 }
 
+/* NEW: sync status indicator */
+.headerRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.syncStatus {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: rgba(0, 0, 0, 0.18);
+  user-select: none;
+}
+
+.syncDot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.syncDot--ok {
+  background: #29d17d;
+}
+
+.syncDot--warn,
+.syncDot--unknown {
+  background: #f6c453;
+}
+
+.syncDot--fail {
+  background: #ff5b5b;
+}
+
+.syncLabel {
+  font-size: 12px;
+  color: var(--text);
+  opacity: 0.9;
+}
+
 .sub {
   margin-top: 6px;
   color: var(--muted);
@@ -140,6 +185,18 @@ body {
   color: var(--muted);
   font-size: 13px;
   margin: 6px 0 10px;
+}
+
+#syncSourcePickedInfo {
+  user-select: text;
+  color: var(--text);
+  font-size: 12px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: rgba(0, 0, 0, 0.18);
+  word-break: break-word;
+  white-space: normal;
 }
 
 .splitPane {
