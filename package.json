@@ -1,36 +1,49 @@
 {
-  "name": "trae-template-deployer",
-  "displayName": "Trae Rule Deployer",
+  "name": "synapse-cli",
+  "displayName": "Synapse",
   "version": "0.1.0",
-  "private": true,
-  "description": "Deploy Trae Template into projects (copy or symlink) with status and sync.",
-  "publisher": "lcmkevin",
+  "private": false,
+  "description": "Synapse - Intelligent rule orchestration for AI-powered development",
+  "publisher": "labs-synapse",
   "license": "MIT",
   "bin": {
-    "trae-template": "bin/trae-template.js",
-    "trae-rule": "bin/trae-template.js"
+    "synapse": "./bin/synapse-unified.js"
   },
   "main": "./src/core.js",
   "exports": {
     ".": "./src/core.js",
-    "./cli": "./bin/trae-template.js"
+    "./cli": "./bin/synapse-unified.js"
   },
   "files": [
     "bin/",
+    "standalone/",
+    "website/",
     "src/",
     "public/",
-    "Template/",
     "README.md",
     "package.json"
   ],
   "scripts": {
-    "cli": "node ./bin/trae-template.js help",
-    "dashboard": "node ./src/server.js"
+    "build": "npm --prefix ./standalone run build",
+    "postinstall": "npm run build",
+    "prepublishOnly": "npm run build",
+    "dashboard": "node ./src/server.js",
+    "website:dev": "cd website && python -m http.server 3000",
+    "website:build": "node -e \"require('fs-extra').removeSync('dist/website'); require('fs-extra').copySync('website','dist/website',{overwrite:true});\""
   },
   "engines": {
     "node": ">=16.17.0"
   },
+  "dependencies": {
+    "chokidar": "^3.5.0",
+    "commander": "^11.0.0",
+    "express": "^4.18.0",
+    "fs-extra": "^11.0.0",
+    "vercel": "^51.7.0",
+    "ws": "^8.14.0"
+  },
   "devDependencies": {
+    "@types/fs-extra": "^11.0.0",
     "@types/node": "^20.0.0"
   }
 }

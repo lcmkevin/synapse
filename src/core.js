@@ -7,9 +7,10 @@ const crypto = require("crypto");
 const childProcess = require("child_process");
 const os = require("os");
 
-const DEFAULT_TEMPLATE_SUBPATH = ".trae";
-const DEFAULT_STATE_FILE = path.posix.join(".trae", ".deployer.json");
-const DEFAULT_GITIGNORE_ENTRY = ".trae/";
+// UPDATED:
+const DEFAULT_TEMPLATE_SUBPATH = ".synapse";
+const DEFAULT_STATE_FILE = path.posix.join(".synapse", ".deployer.json");
+const DEFAULT_GITIGNORE_ENTRY = ".synapse/";
 
 function toPosixPath(p) {
   return p.split(path.sep).join(path.posix.sep);
@@ -130,15 +131,16 @@ async function loadState(targetRoot) {
 }
 
 async function computePlan({ templateRoot, targetRoot, templateSubPath = DEFAULT_TEMPLATE_SUBPATH }) {
-  const templateTraeDir = path.join(templateRoot, templateSubPath);
-  if (!(await exists(templateTraeDir))) {
-    throw new Error(`Template folder not found: ${templateTraeDir}`);
+  // UPDATED:
+  const templateSynapseDir = path.join(templateRoot, templateSubPath);
+  if (!(await exists(templateSynapseDir))) {
+    throw new Error(`Template folder not found: ${templateSynapseDir}`);
   }
 
-  const srcFiles = await listFilesRecursively(templateTraeDir);
+  const srcFiles = await listFilesRecursively(templateSynapseDir);
   const plan = [];
   for (const srcFile of srcFiles) {
-    const rel = path.relative(templateTraeDir, srcFile);
+    const rel = path.relative(templateSynapseDir, srcFile);
     const dest = path.join(targetRoot, templateSubPath, rel);
     plan.push({
       src: srcFile,
@@ -146,7 +148,7 @@ async function computePlan({ templateRoot, targetRoot, templateSubPath = DEFAULT
       relPosix: toPosixPath(path.posix.join(templateSubPath, toPosixPath(rel))),
     });
   }
-  return { templateTraeDir, plan };
+  return { templateSynapseDir, plan };
 }
 
 async function initDeploy({
@@ -239,7 +241,7 @@ async function initDeploy({
   }
 
   const state = {
-    tool: toolName || "trae-template",
+    tool: toolName || "synapse",
     version: version || "0.1.0",
     templateRoot: templateRoot,
     templateSubPath: templateSubPath,
@@ -486,15 +488,16 @@ async function runProcess(cmd, args, cwd) {
   });
 }
 
-async function resolveTraeSubdir(sourceRoot, kind) {
+// UPDATED:
+async function resolveSynapseSubdir(sourceRoot, kind) {
   const base = path.basename(sourceRoot);
   if (base === DEFAULT_TEMPLATE_SUBPATH) {
-    const inTrae = path.join(sourceRoot, kind);
-    if (await exists(inTrae)) return inTrae;
+    const inSynapse = path.join(sourceRoot, kind);
+    if (await exists(inSynapse)) return inSynapse;
   }
 
-  const dotTrae = path.join(sourceRoot, DEFAULT_TEMPLATE_SUBPATH, kind);
-  if (await exists(dotTrae)) return dotTrae;
+  const dotSynapse = path.join(sourceRoot, DEFAULT_TEMPLATE_SUBPATH, kind);
+  if (await exists(dotSynapse)) return dotSynapse;
 
   const direct = path.join(sourceRoot, kind);
   if (await exists(direct)) return direct;
@@ -520,14 +523,15 @@ async function copyDirTree({ srcDir, destDir, overwrite }) {
   return { copied, srcDir, destDir };
 }
 
-async function syncTraeFolder({ sourceRoot, targetRoot, kind, overwrite }) {
-  const srcDir = await resolveTraeSubdir(sourceRoot, kind);
+// UPDATED:
+async function syncSynapseFolder({ sourceRoot, targetRoot, kind, overwrite }) {
+  const srcDir = await resolveSynapseSubdir(sourceRoot, kind);
   const destDir = path.join(targetRoot, DEFAULT_TEMPLATE_SUBPATH, kind);
   return await copyDirTree({ srcDir, destDir, overwrite: !!overwrite });
 }
 
 async function gitCloneToTemp({ repoUrl, branch }) {
-  const parent = await fsp.mkdtemp(path.join(os.tmpdir(), "trae-sync-"));
+  const parent = await fsp.mkdtemp(path.join(os.tmpdir(), "synapse-sync-"));
   const repoDir = path.join(parent, "repo");
   const cleanup = async () => {
     await fsp.rm(parent, { recursive: true, force: true });
@@ -543,33 +547,35 @@ async function gitCloneToTemp({ repoUrl, branch }) {
   return { repoDir, cleanup };
 }
 
-async function syncTraeFromGit({ repoUrl, branch, targetRoot, kind, overwrite }) {
+// UPDATED:
+async function syncSynapseFromGit({ repoUrl, branch, targetRoot, kind, overwrite }) {
   const { repoDir, cleanup } = await gitCloneToTemp({ repoUrl, branch });
   try {
-    return await syncTraeFolder({ sourceRoot: repoDir, targetRoot, kind, overwrite });
+    return await syncSynapseFolder({ sourceRoot: repoDir, targetRoot, kind, overwrite });
   } finally {
     await cleanup();
   }
 }
 
-async function publishTraeToGit({ sourceRoot, repoUrl, branch, commitMessage }) {
+// UPDATED:
+async function publishSynapseToGit({ sourceRoot, repoUrl, branch, commitMessage }) {
   const { repoDir, cleanup } = await gitCloneToTemp({ repoUrl, branch });
   try {
-    const srcTraeDir = path.join(sourceRoot, DEFAULT_TEMPLATE_SUBPATH);
-    const rulesDir = path.join(srcTraeDir, "rules");
-    const skillsDir = path.join(srcTraeDir, "skills");
+    const srcSynapseDir = path.join(sourceRoot, DEFAULT_TEMPLATE_SUBPATH);
+    const rulesDir = path.join(srcSynapseDir, "rules");
+    const skillsDir = path.join(srcSynapseDir, "skills");
     if (!(await exists(rulesDir)) && !(await exists(skillsDir))) {
       return { changed: false, reason: "no_rules_or_skills" };
     }
 
-    const repoTraeDir = path.join(repoDir, DEFAULT_TEMPLATE_SUBPATH);
-    await ensureDir(repoTraeDir);
+    const repoSynapseDir = path.join(repoDir, DEFAULT_TEMPLATE_SUBPATH);
+    await ensureDir(repoSynapseDir);
 
     if (await exists(rulesDir)) {
-      await copyDirTree({ srcDir: rulesDir, destDir: path.join(repoTraeDir, "rules"), overwrite: true });
+      await copyDirTree({ srcDir: rulesDir, destDir: path.join(repoSynapseDir, "rules"), overwrite: true });
     }
     if (await exists(skillsDir)) {
-      await copyDirTree({ srcDir: skillsDir, destDir: path.join(repoTraeDir, "skills"), overwrite: true });
+      await copyDirTree({ srcDir: skillsDir, destDir: path.join(repoSynapseDir, "skills"), overwrite: true });
     }
 
     const statusRes = await runProcess("git", ["status", "--porcelain"], repoDir);
@@ -581,7 +587,7 @@ async function publishTraeToGit({ sourceRoot, repoUrl, branch, commitMessage }) 
     const addRes = await runProcess("git", ["add", "-A"], repoDir);
     if (addRes.code !== 0) throw new Error((addRes.stderr || addRes.stdout || "git add failed").trim());
 
-    const msg = commitMessage && String(commitMessage).trim() ? String(commitMessage).trim() : "Publish Trae rules/skills";
+    const msg = commitMessage && String(commitMessage).trim() ? String(commitMessage).trim() : "Publish Synapse rules/skills";
     const commitRes = await runProcess("git", ["commit", "-m", msg], repoDir);
     if (commitRes.code !== 0) throw new Error((commitRes.stderr || commitRes.stdout || "git commit failed").trim());
 
@@ -652,7 +658,7 @@ async function mergeGitIndexConflict({ repoRoot, filePath, outPath, diff3, apply
     throw new Error(msg);
   }
 
-  const tempDir = await fsp.mkdtemp(path.join(os.tmpdir(), "trae-merge-"));
+  const tempDir = await fsp.mkdtemp(path.join(os.tmpdir(), "synapse-merge-")); // UPDATED:
   const cleanup = async () => {
     await fsp.rm(tempDir, { recursive: true, force: true });
   };
@@ -715,7 +721,7 @@ function containsConflictMarkers(text) {
 }
 
 async function simulateMergeText({ baseText, oursText, theirsText, diff3 }) {
-  const tempDir = await fsp.mkdtemp(path.join(os.tmpdir(), "trae-preview-"));
+  const tempDir = await fsp.mkdtemp(path.join(os.tmpdir(), "synapse-preview-")); // UPDATED:
   const cleanup = async () => {
     await fsp.rm(tempDir, { recursive: true, force: true });
   };
@@ -760,7 +766,7 @@ async function previewPresetSync({ targetRoot, upstreamRoot }) {
     const localDir = path.join(targetAbs, DEFAULT_TEMPLATE_SUBPATH, kind);
     let upstreamDir = null;
     try {
-      upstreamDir = await resolveTraeSubdir(upstreamAbs, kind);
+      upstreamDir = await resolveSynapseSubdir(upstreamAbs, kind);
     } catch {
       upstreamDir = null;
     }
@@ -833,7 +839,7 @@ async function previewPresetFile({ targetRoot, upstreamRoot, kind, relPosix, dif
   const localDir = path.join(targetAbs, DEFAULT_TEMPLATE_SUBPATH, kind);
   let upstreamDir = null;
   try {
-    upstreamDir = await resolveTraeSubdir(upstreamAbs, kind);
+    upstreamDir = await resolveSynapseSubdir(upstreamAbs, kind);
   } catch {
     upstreamDir = null;
   }
@@ -884,7 +890,7 @@ async function applyPresetSync({ targetRoot, upstreamRoot, selections, diff3, co
     const localDir = path.join(targetAbs, DEFAULT_TEMPLATE_SUBPATH, kind);
     let upstreamDir = null;
     try {
-      upstreamDir = await resolveTraeSubdir(upstreamAbs, kind);
+      upstreamDir = await resolveSynapseSubdir(upstreamAbs, kind);
     } catch {
       skipped.push({ id, reason: "no_upstream_kind" });
       continue;
@@ -956,9 +962,10 @@ module.exports = {
   status: statusCheck,
   sync: syncCopy,
   gitignore: ensureGitignore,
-  syncTraeFolder,
-  syncTraeFromGit,
-  publishTraeToGit,
+  // UPDATED:
+  syncSynapseFolder,
+  syncSynapseFromGit,
+  publishSynapseToGit,
   mergeThreeWay,
   mergeGitIndexConflict,
   previewPresetSync,

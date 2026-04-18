@@ -1,137 +1,94 @@
 "use strict";
 
-const http = require("http");
 const path = require("path");
-const fs = require("fs");
-const fsp = fs.promises;
-const { URL } = require("url");
-const crypto = require("crypto"); // NEW:
+const http = require("http");
+const express = require("express");
+const WebSocket = require("ws");
+const fs = require("fs-extra");
 const childProcess = require("child_process");
 const os = require("os");
 
 const core = require("./core");
 
-const DEFAULT_TEMPLATE_ROOT = path.resolve(__dirname, "..", "Template");
 const PUBLIC_DIR = path.resolve(__dirname, "..", "public");
+const DEFAULT_TEMPLATE_ROOT = path.resolve(__dirname, "..", "Template");
+const PORT = Number(process.env.SYNAPSE_PORT || 3456);
 
-const PREVIEW_SESSION_TTL_MS = 15 * 60 * 1000;
-const previewSessions = new Map();
+const app = express();
+app.use(express.static(PUBLIC_DIR));
+app.use(express.json({ limit: "50mb" }));
 
-// NEW: minimal WebSocket broadcast for sync status (no external deps)
-const wsSyncClients = new Set();
-let lastSyncStatus = null;
+const server = http.createServer(app);
 
-function wsAcceptKey(key) {
-  const GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
-  return crypto.createHash("sha1").update(String(key) + GUID, "binary").digest("base64");
-}
+const wss = new WebSocket.Server({ noServer: true });
+const wsClients = new Set();
+let lastSyncPayload = null;
 
-function wsSendText(socket, text) {
-  const payload = Buffer.from(String(text), "utf8");
-  const len = payload.length;
-  let header;
-  if (len < 126) {
-    header = Buffer.from([0x81, len]);
-  } else if (len < 65536) {
-    header = Buffer.from([0x81, 126, (len >> 8) & 255, len & 255]);
-  } else {
-    const b = Buffer.alloc(10);
-    b[0] = 0x81;
-    b[1] = 127;
-    b.writeBigUInt64BE(BigInt(len), 2);
-    header = b;
-  }
-  socket.write(Buffer.concat([header, payload]));
-}
-
-function broadcastSyncStatus(payload) {
-  lastSyncStatus = payload;
-  const text = JSON.stringify(payload);
-  for (const sock of Array.from(wsSyncClients)) {
-    try {
-      if (!sock || sock.destroyed) {
-        wsSyncClients.delete(sock);
-        continue;
-      }
-      wsSendText(sock, text);
-    } catch {
-      wsSyncClients.delete(sock);
-      try {
-        sock.destroy();
-      } catch {
-        void 0;
-      }
-    }
-  }
-}
-
-function handleWsUpgrade(req, socket) {
+server.on("upgrade", (req, socket, head) => {
   try {
     const url = new URL(req.url, "http://localhost");
-    if (url.pathname !== "/ws/sync-status") return false;
-    const key = req.headers["sec-websocket-key"];
-    if (!key) return false;
-    const accept = wsAcceptKey(key);
-    socket.write(
-      [
-        "HTTP/1.1 101 Switching Protocols",
-        "Upgrade: websocket",
-        "Connection: Upgrade",
-        `Sec-WebSocket-Accept: ${accept}`,
-        "",
-        "",
-      ].join("\r\n")
-    );
-    wsSyncClients.add(socket);
-    socket.on("close", () => wsSyncClients.delete(socket));
-    socket.on("end", () => wsSyncClients.delete(socket));
-    socket.on("error", () => wsSyncClients.delete(socket));
-    if (lastSyncStatus) {
-      try {
-        wsSendText(socket, JSON.stringify(lastSyncStatus));
-      } catch {
-        void 0;
-      }
+    if (url.pathname !== "/ws/sync-status") {
+      socket.destroy();
+      return;
     }
-    return true;
+    wss.handleUpgrade(req, socket, head, (ws) => wss.emit("connection", ws, req));
   } catch {
-    return false;
+    socket.destroy();
   }
-}
+});
 
-function randomId() {
-  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
-}
+wss.on("connection", (ws) => {
+  wsClients.add(ws);
+  ws.on("close", () => wsClients.delete(ws));
+  ws.on("error", () => wsClients.delete(ws));
+  if (lastSyncPayload) {
+    try {
+      ws.send(JSON.stringify(lastSyncPayload));
+    } catch {
+      void 0;
+    }
+  }
+});
 
-function prunePreviewSessions() {
-  const now = Date.now();
-  for (const [id, s] of previewSessions.entries()) {
-    if (!s || typeof s.createdAt !== "number" || now - s.createdAt > PREVIEW_SESSION_TTL_MS) {
-      previewSessions.delete(id);
-      if (s && typeof s.cleanup === "function") {
-        void s.cleanup().catch(() => void 0);
-      }
+function broadcastSync(ok, details) {
+  const payload = {
+    kind: "sync",
+    ok: !!ok,
+    at: Date.now(),
+    ...(details || {}),
+  };
+  lastSyncPayload = payload;
+  const text = JSON.stringify(payload);
+  for (const ws of Array.from(wsClients)) {
+    try {
+      if (ws.readyState === WebSocket.OPEN) ws.send(text);
+    } catch {
+      wsClients.delete(ws);
     }
   }
 }
 
-async function runProcess(cmd, args, cwd) {
-  return await new Promise((resolve, reject) => {
-    const child = childProcess.spawn(cmd, args, { cwd, windowsHide: true });
-    let stdout = "";
-    let stderr = "";
-    child.stdout.on("data", (b) => (stdout += b.toString("utf8")));
-    child.stderr.on("data", (b) => (stderr += b.toString("utf8")));
-    child.on("error", reject);
-    child.on("exit", (code) => resolve({ code: typeof code === "number" ? code : 1, stdout, stderr }));
-  });
+function requireString(body, key) {
+  const v = body && typeof body[key] === "string" ? body[key].trim() : "";
+  return v;
 }
 
-async function pickFolderDialogWin32(initialPath, title) {
-  if (process.platform !== "win32") {
-    throw new Error("Folder picker is only supported on Windows.");
-  }
+function requireBool(body, key) {
+  return !!(body && body[key]);
+}
 
+function normalizeProjectPath(p) {
+  const v = String(p || "").trim();
+  if (!v) throw new Error("Project Path is required.");
+  return v;
+}
+
+function normalizeTemplateRoot(p) {
+  const v = String(p || "").trim();
+  return v || DEFAULT_TEMPLATE_ROOT;
+}
+
+async function pickFolderDialogWin32({ title, initialPath }) {
   const desc = typeof title === "string" && title.trim() ? title.trim().slice(0, 120) : "Select Folder";
   const script = [
     "Add-Type -AssemblyName System.Windows.Forms",
@@ -150,28 +107,69 @@ async function pickFolderDialogWin32(initialPath, title) {
     "$null = $dlg.ShowDialog($form)",
     "$form.Close()",
     "if ($dlg.SelectedPath) { Write-Output $dlg.SelectedPath }",
-  ].join('; ');
+  ].join("; ");
 
   const init = typeof initialPath === "string" ? initialPath.trim() : "";
-  const res = await runProcess(
-    "powershell.exe",
-    ["-NoProfile", "-STA", "-ExecutionPolicy", "Bypass", "-Command", script, init], // NEW:
-    process.cwd()
-  );
-  if (res.code !== 0) {
-    const msg = (res.stderr || res.stdout || "").trim() || "Folder picker failed.";
-    throw new Error(msg);
-  }
-  return (res.stdout || "").trim();
+  const res = await runProcess("powershell.exe", ["-NoProfile", "-STA", "-ExecutionPolicy", "Bypass", "-Command", script, init], process.cwd());
+  const picked = (res.stdout || "").trim();
+  if (res.code !== 0) throw new Error((res.stderr || res.stdout || "Folder picker failed").trim());
+  return { path: picked || null };
 }
 
-async function gitCloneToTemp(repoUrl, branch) {
-  const parent = await fsp.mkdtemp(path.join(os.tmpdir(), "trae-preview-"));
+function isSafeRelPosix(relPosix) {
+  if (!relPosix || typeof relPosix !== "string") return false;
+  const norm = path.posix.normalize(relPosix).replace(/^(\.\/)+/, "");
+  if (!norm || norm === "." || norm.includes("\0")) return false;
+  if (path.posix.isAbsolute(norm)) return false;
+  if (norm.startsWith("..")) return false;
+  const parts = norm.split("/");
+  if (parts.some((p) => p === "..")) return false;
+  return true;
+}
+
+function normalizeUploadedPath(p) {
+  const posix = String(p || "").replace(/\\/g, "/");
+  if (!posix) return null;
+  const idx = posix.indexOf("/.synapse/");
+  if (idx >= 0) return posix.slice(idx + 1);
+  if (posix.startsWith(".synapse/")) return posix;
+  const idxRules = posix.indexOf("/rules/");
+  if (idxRules >= 0) return posix.slice(idxRules + 1);
+  const idxSkills = posix.indexOf("/skills/");
+  if (idxSkills >= 0) return posix.slice(idxSkills + 1);
+  if (posix.startsWith("rules/") || posix.startsWith("skills/")) return posix;
+  return null;
+}
+
+async function materializeUploadedFiles(files) {
+  const parent = await fs.mkdtemp(path.join(os.tmpdir(), "synapse-upload-"));
+  const cleanup = async () => {
+    await fs.remove(parent);
+  };
+
+  for (const f of Array.isArray(files) ? files : []) {
+    const rel = normalizeUploadedPath(f && f.path ? f.path : "");
+    if (!rel) continue;
+    const relPosix = rel.replace(/\\/g, "/");
+    if (!isSafeRelPosix(relPosix)) continue;
+    const abs = path.join(parent, relPosix.split("/").join(path.sep));
+    await fs.ensureDir(path.dirname(abs));
+    const buf = Buffer.from(String(f.contentBase64 || ""), "base64");
+    await fs.writeFile(abs, buf);
+  }
+
+  return { dir: parent, cleanup };
+}
+
+async function gitCloneToTemp({ repoUrl, branch }) {
+  const parent = await fs.mkdtemp(path.join(os.tmpdir(), "synapse-preview-git-"));
   const repoDir = path.join(parent, "repo");
   const cleanup = async () => {
-    await fsp.rm(parent, { recursive: true, force: true });
+    await fs.remove(parent);
   };
-  const res = await runProcess("git", ["clone", "--depth", "1", "--branch", branch || "main", repoUrl, repoDir], parent);
+
+  const env = { ...process.env, GIT_TERMINAL_PROMPT: "0" };
+  const res = await runProcess("git", ["clone", "--depth", "1", "--branch", branch || "main", repoUrl, repoDir], parent, env);
   if (res.code !== 0) {
     await cleanup();
     const msg = (res.stderr || res.stdout || "").trim() || "git clone failed";
@@ -180,113 +178,82 @@ async function gitCloneToTemp(repoUrl, branch) {
   return { repoDir, cleanup };
 }
 
-function normalizeRelPosix(p) {
-  const s = String(p || "").replace(/\\/g, "/");
-  const norm = path.posix.normalize(s).replace(/^(\.\/)+/, "");
-  if (!norm || norm === "." || norm.includes("\0")) return null;
-  if (path.posix.isAbsolute(norm)) return null;
-  if (norm.startsWith("..")) return null;
-  if (norm.split("/").some((part) => part === "..")) return null;
-  return norm;
+function runProcess(cmd, args, cwd, env) {
+  return new Promise((resolve, reject) => {
+    const child = childProcess.spawn(cmd, args, { cwd, windowsHide: true, env: env || process.env });
+    let stdout = "";
+    let stderr = "";
+    child.stdout.on("data", (b) => (stdout += b.toString("utf8")));
+    child.stderr.on("data", (b) => (stderr += b.toString("utf8")));
+    child.on("error", reject);
+    child.on("exit", (code) => resolve({ code: typeof code === "number" ? code : 1, stdout, stderr }));
+  });
 }
 
-async function writeUploadedFilesToTemp(files) {
-  const parent = await fsp.mkdtemp(path.join(os.tmpdir(), "trae-upload-"));
-  const cleanup = async () => {
-    await fsp.rm(parent, { recursive: true, force: true });
-  };
+const PREVIEW_SESSION_TTL_MS = 15 * 60 * 1000;
+const previewSessions = new Map();
 
-  if (!Array.isArray(files)) {
-    await cleanup();
-    throw new Error("files must be an array");
+function randomId() {
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function reapSessions() {
+  const now = Date.now();
+  for (const [id, s] of previewSessions.entries()) {
+    if (!s || typeof s.createdAt !== "number") {
+      previewSessions.delete(id);
+      continue;
+    }
+    if (now - s.createdAt > PREVIEW_SESSION_TTL_MS) {
+      previewSessions.delete(id);
+      if (typeof s.cleanup === "function") void s.cleanup().catch(() => void 0);
+    }
+  }
+}
+
+setInterval(reapSessions, 30 * 1000).unref?.();
+
+app.get("/api/info", async (req, res) => {
+  void req;
+  res.json({
+    tool: "synapse-dashboard",
+    version: "0.1.0",
+    templateRoot: DEFAULT_TEMPLATE_ROOT,
+    cwd: process.cwd(),
+  });
+});
+
+app.post("/api/pickFolder", async (req, res) => {
+  const body = req.body || {};
+  const title = requireString(body, "title") || "Select Folder";
+  const initialPath = requireString(body, "initialPath");
+
+  if (process.platform !== "win32") {
+    res.status(501).json({ error: "Folder picker only supported on Windows in this build." });
+    return;
   }
 
-  for (const f of files) {
-    if (!f || typeof f !== "object") continue;
-    const rel = normalizeRelPosix(f.path);
-    if (!rel) continue;
-    const buf = Buffer.from(String(f.contentBase64 || ""), "base64");
-    const abs = path.join(parent, rel.split("/").join(path.sep));
-    const dir = path.dirname(abs);
-    await fsp.mkdir(dir, { recursive: true });
-    await fsp.writeFile(abs, buf);
+  try {
+    const result = await pickFolderDialogWin32({ title, initialPath });
+    res.json({ ok: true, result });
+  } catch (e) {
+    res.status(500).json({ error: e && e.message ? e.message : String(e) });
   }
+});
 
-  return { upstreamRoot: parent, cleanup };
-}
-
-function send(res, statusCode, headers, body) {
-  res.writeHead(statusCode, headers);
-  res.end(body);
-}
-
-function sendJson(res, statusCode, obj) {
-  send(res, statusCode, { "Content-Type": "application/json; charset=utf-8" }, JSON.stringify(obj, null, 2));
-}
-
-async function readBodyJson(req) {
-  const chunks = [];
-  for await (const chunk of req) chunks.push(chunk);
-  const raw = Buffer.concat(chunks).toString("utf8").trim();
-  if (!raw) return {};
-  return JSON.parse(raw);
-}
-
-function safePathFromPublic(urlPath) {
-  const p = urlPath === "/" ? "/index.html" : urlPath;
-  const decoded = decodeURIComponent(p);
-  const asPosix = decoded.replace(/\\/g, "/");
-  const filePath = path.resolve(PUBLIC_DIR, "." + asPosix);
-  const rel = path.relative(PUBLIC_DIR, filePath);
-  if (rel.startsWith("..") || path.isAbsolute(rel)) return null;
-  return filePath;
-}
-
-function contentType(filePath) {
-  const ext = path.extname(filePath).toLowerCase();
-  if (ext === ".html") return "text/html; charset=utf-8";
-  if (ext === ".css") return "text/css; charset=utf-8";
-  if (ext === ".js") return "text/javascript; charset=utf-8";
-  if (ext === ".json") return "application/json; charset=utf-8";
-  if (ext === ".svg") return "image/svg+xml";
-  return "application/octet-stream";
-}
-
-async function handleApi(req, res, url) {
-  if (req.method === "GET" && url.pathname === "/api/info") {
-    return sendJson(res, 200, {
-      tool: "trae-rule-dashboard",
-      templateRoot: DEFAULT_TEMPLATE_ROOT,
-      templateSubPath: core.DEFAULT_TEMPLATE_SUBPATH,
-      stateFile: core.DEFAULT_STATE_FILE,
-    });
-  }
-
-  if (req.method !== "POST") return sendJson(res, 405, { error: "Method not allowed" });
-
-  const body = await readBodyJson(req);
-  const projectPath = typeof body.projectPath === "string" ? body.projectPath : "";
-  const targetRoot = core.normalizeTargetRoot(projectPath || process.cwd());
-  const templateRoot = typeof body.templateRoot === "string" && body.templateRoot.trim() ? core.ensureAbsolute(body.templateRoot) : DEFAULT_TEMPLATE_ROOT;
-
-  prunePreviewSessions();
-
-  if (url.pathname === "/api/pickFolder") {
-    const initialPath = typeof body.initialPath === "string" ? body.initialPath : "";
-    const title = typeof body.title === "string" ? body.title : "";
-    const pickedPath = await pickFolderDialogWin32(initialPath, title);
-    return sendJson(res, 200, { ok: true, result: { path: pickedPath } });
-  }
-
-  if (url.pathname === "/api/init") {
-    const mode = body.mode === "copy" ? "copy" : "symlink";
-    const force = !!body.force;
-    const backup = !!body.backup;
-    const dryRun = !!body.dryRun;
+app.post("/api/init", async (req, res) => {
+  const body = req.body || {};
+  try {
+    const targetRoot = normalizeProjectPath(requireString(body, "projectPath"));
+    const templateRoot = normalizeTemplateRoot(requireString(body, "templateRoot"));
+    const mode = requireString(body, "mode") === "copy" ? "copy" : "symlink";
+    const force = requireBool(body, "force");
+    const backup = requireBool(body, "backup");
+    const dryRun = requireBool(body, "dryRun");
 
     const events = [];
     const result = await core.initDeploy({
-      toolName: "trae-template",
+      toolName: "synapse",
       version: "0.1.0",
       templateRoot,
       targetRoot,
@@ -296,286 +263,283 @@ async function handleApi(req, res, url) {
       dryRun,
       onProgress: (e) => events.push(e),
     });
-    return sendJson(res, 200, { ok: true, result, events });
+    res.json({ ok: true, result, events });
+  } catch (e) {
+    res.status(500).json({ error: e && e.message ? e.message : String(e) });
   }
+});
 
-  if (url.pathname === "/api/status") {
+app.post("/api/status", async (req, res) => {
+  const body = req.body || {};
+  try {
+    const targetRoot = normalizeProjectPath(requireString(body, "projectPath"));
+    const templateRoot = normalizeTemplateRoot(requireString(body, "templateRoot"));
+    const result = await core.statusCheck({ templateRoot, targetRoot, templateSubPath: ".synapse" });
+    res.json({ ok: true, result });
+  } catch (e) {
+    res.status(500).json({ error: e && e.message ? e.message : String(e) });
+  }
+});
+
+app.post("/api/sync", async (req, res) => {
+  const body = req.body || {};
+  try {
+    const targetRoot = normalizeProjectPath(requireString(body, "projectPath"));
+    const templateRoot = normalizeTemplateRoot(requireString(body, "templateRoot"));
+    const force = requireBool(body, "force");
+    const backup = requireBool(body, "backup");
+    const dryRun = requireBool(body, "dryRun");
+
+    broadcastSync(false, { phase: "syncing" });
     const events = [];
-    const result = await core.statusCheck({
+    const result = await core.syncCopy({
       templateRoot,
       targetRoot,
+      force,
+      backup,
+      dryRun,
       onProgress: (e) => events.push(e),
     });
-    return sendJson(res, 200, { ok: true, result, events });
+    broadcastSync(true, { phase: "done", dryRun: !!dryRun, targetRoot, templateRoot });
+    res.json({ ok: true, result, events });
+  } catch (e) {
+    broadcastSync(false, { phase: "error", error: e && e.message ? e.message : String(e) });
+    res.status(500).json({ error: e && e.message ? e.message : String(e) });
   }
+});
 
-  if (url.pathname === "/api/sync") {
-    const force = !!body.force;
-    const backup = !!body.backup;
-    const dryRun = !!body.dryRun;
-
-    const events = [];
-    try {
-      const result = await core.syncCopy({
-        templateRoot,
-        targetRoot,
-        force,
-        backup,
-        dryRun,
-        onProgress: (e) => events.push(e),
-      });
-      broadcastSyncStatus({ ok: true, at: Date.now(), kind: "sync", dryRun: !!dryRun, targetRoot, templateRoot }); // NEW:
-      return sendJson(res, 200, { ok: true, result, events });
-    } catch (e) {
-      broadcastSyncStatus({ ok: false, at: Date.now(), kind: "sync", dryRun: !!dryRun, targetRoot, templateRoot, error: e && e.message ? e.message : String(e) }); // NEW:
-      throw e;
-    }
-  }
-
-  if (url.pathname === "/api/gitignore") {
-    const dryRun = !!body.dryRun;
+app.post("/api/gitignore", async (req, res) => {
+  const body = req.body || {};
+  try {
+    const targetRoot = normalizeProjectPath(requireString(body, "projectPath"));
+    const dryRun = requireBool(body, "dryRun");
     const result = await core.ensureGitignore({ targetRoot, dryRun });
-    return sendJson(res, 200, { ok: true, result });
+    res.json({ ok: true, result });
+  } catch (e) {
+    res.status(500).json({ error: e && e.message ? e.message : String(e) });
   }
+});
 
-  if (url.pathname === "/api/syncRules") {
-    const overwrite = !!body.overwrite;
-    const sourcePath = typeof body.sourcePath === "string" ? body.sourcePath : "";
-    const repoUrl = typeof body.repoUrl === "string" ? body.repoUrl : "";
-    const branch = typeof body.branch === "string" ? body.branch : "main";
-
-    const events = [];
-    let result;
-    if (repoUrl && repoUrl.trim()) {
-      events.push({ type: "git", repoUrl, branch });
-      result = await core.syncTraeFromGit({ repoUrl: repoUrl.trim(), branch, targetRoot, kind: "rules", overwrite });
-    } else {
-      if (!sourcePath || !sourcePath.trim()) return sendJson(res, 400, { error: "sourcePath or repoUrl required" });
-      events.push({ type: "copy", sourcePath: sourcePath.trim() });
-      result = await core.syncTraeFolder({ sourceRoot: core.ensureAbsolute(sourcePath.trim()), targetRoot, kind: "rules", overwrite });
-    }
-    return sendJson(res, 200, { ok: true, result, events });
-  }
-
-  if (url.pathname === "/api/syncRulesUpload") {
-    const overwrite = !!body.overwrite;
-    const files = body.files;
-    const { upstreamRoot, cleanup } = await writeUploadedFilesToTemp(files);
-    try {
-      const result = await core.syncTraeFolder({ sourceRoot: upstreamRoot, targetRoot, kind: "rules", overwrite });
-      return sendJson(res, 200, { ok: true, result });
-    } finally {
-      await cleanup().catch(() => void 0);
-    }
-  }
-
-  if (url.pathname === "/api/syncSkills") {
-    const overwrite = !!body.overwrite;
-    const sourcePath = typeof body.sourcePath === "string" ? body.sourcePath : "";
-    const repoUrl = typeof body.repoUrl === "string" ? body.repoUrl : "";
-    const branch = typeof body.branch === "string" ? body.branch : "main";
-
-    const events = [];
-    let result;
-    if (repoUrl && repoUrl.trim()) {
-      events.push({ type: "git", repoUrl, branch });
-      result = await core.syncTraeFromGit({ repoUrl: repoUrl.trim(), branch, targetRoot, kind: "skills", overwrite });
-    } else {
-      if (!sourcePath || !sourcePath.trim()) return sendJson(res, 400, { error: "sourcePath or repoUrl required" });
-      events.push({ type: "copy", sourcePath: sourcePath.trim() });
-      result = await core.syncTraeFolder({ sourceRoot: core.ensureAbsolute(sourcePath.trim()), targetRoot, kind: "skills", overwrite });
-    }
-    return sendJson(res, 200, { ok: true, result, events });
-  }
-
-  if (url.pathname === "/api/syncSkillsUpload") {
-    const overwrite = !!body.overwrite;
-    const files = body.files;
-    const { upstreamRoot, cleanup } = await writeUploadedFilesToTemp(files);
-    try {
-      const result = await core.syncTraeFolder({ sourceRoot: upstreamRoot, targetRoot, kind: "skills", overwrite });
-      return sendJson(res, 200, { ok: true, result });
-    } finally {
-      await cleanup().catch(() => void 0);
-    }
-  }
-
-  if (url.pathname === "/api/publish") {
-    const repoUrl = typeof body.repoUrl === "string" ? body.repoUrl : "";
-    const branch = typeof body.branch === "string" ? body.branch : "main";
-    const commitMessage = typeof body.commitMessage === "string" ? body.commitMessage : "Publish Trae rules/skills";
-    if (!repoUrl || !repoUrl.trim()) return sendJson(res, 400, { error: "repoUrl required" });
-
-    const result = await core.publishTraeToGit({ sourceRoot: targetRoot, repoUrl: repoUrl.trim(), branch, commitMessage });
-    return sendJson(res, 200, { ok: true, result });
-  }
-
-  if (url.pathname === "/api/merge") {
-    const mode = typeof body.mode === "string" ? body.mode : "paths";
-    const diff3 = !!body.diff3;
-    const apply = !!body.apply;
+app.post("/api/merge", async (req, res) => {
+  const body = req.body || {};
+  try {
+    const projectPath = normalizeProjectPath(requireString(body, "projectPath"));
+    const mode = requireString(body, "mode") === "git" ? "git" : "paths";
+    const apply = requireBool(body, "apply");
+    const diff3 = requireBool(body, "diff3");
 
     if (mode === "git") {
-      const repoRoot = targetRoot;
-      const filePath = typeof body.filePath === "string" ? body.filePath : "";
-      const outPath = typeof body.outPath === "string" ? body.outPath : "";
-      if (!filePath || !filePath.trim()) return sendJson(res, 400, { error: "filePath required" });
-      const result = await core.mergeGitIndexConflict({
-        repoRoot,
-        filePath: filePath.trim(),
-        outPath: outPath && outPath.trim() ? core.ensureAbsolute(outPath.trim(), repoRoot) : null,
-        diff3,
-        apply,
-      });
-      return sendJson(res, 200, { ok: true, result });
+      const filePath = requireString(body, "filePath");
+      const outPath = requireString(body, "outPath");
+      const result = await core.mergeGitIndexConflict({ repoRoot: projectPath, filePath, outPath, diff3, apply });
+      res.json({ ok: true, result });
+      return;
     }
 
-    const basePath = typeof body.basePath === "string" ? body.basePath : "";
-    const oursPath = typeof body.oursPath === "string" ? body.oursPath : "";
-    const theirsPath = typeof body.theirsPath === "string" ? body.theirsPath : "";
-    const outPath = typeof body.outPath === "string" ? body.outPath : "";
-    if (!basePath || !oursPath || !theirsPath) return sendJson(res, 400, { error: "basePath, oursPath, theirsPath required" });
-
-    const result = await core.mergeThreeWay({
-      basePath: basePath.trim(),
-      oursPath: oursPath.trim(),
-      theirsPath: theirsPath.trim(),
-      outPath: outPath && outPath.trim() ? outPath.trim() : null,
-      diff3,
-      apply,
-      allowedRoot: targetRoot,
-    });
-    return sendJson(res, 200, { ok: true, result });
+    const basePath = requireString(body, "basePath");
+    const oursPath = requireString(body, "oursPath");
+    const theirsPath = requireString(body, "theirsPath");
+    const outPath = requireString(body, "outPath");
+    const result = await core.mergeThreeWay({ basePath, oursPath, theirsPath, outPath, diff3, apply, cwd: projectPath });
+    res.json({ ok: true, result });
+  } catch (e) {
+    res.status(500).json({ error: e && e.message ? e.message : String(e) });
   }
+});
 
-  if (url.pathname === "/api/previewSync") {
-    const sourcePath = typeof body.sourcePath === "string" ? body.sourcePath : "";
-    const repoUrl = typeof body.repoUrl === "string" ? body.repoUrl : "";
-    const branch = typeof body.branch === "string" ? body.branch : "main";
+async function syncKindFromFolder({ projectPath, sourcePath, kind, overwrite }) {
+  return await core.syncSynapseFolder({ sourceRoot: sourcePath, targetRoot: projectPath, kind, overwrite: !!overwrite });
+}
+
+async function syncKindFromGit({ projectPath, repoUrl, branch, kind, overwrite }) {
+  return await core.syncSynapseFromGit({ repoUrl, branch, targetRoot: projectPath, kind, overwrite: !!overwrite });
+}
+
+app.post("/api/syncRules", async (req, res) => {
+  const body = req.body || {};
+  try {
+    const projectPath = normalizeProjectPath(requireString(body, "projectPath"));
+    const overwrite = requireBool(body, "overwrite");
+    const repoUrl = requireString(body, "repoUrl");
+    const branch = requireString(body, "branch") || "main";
+    const sourcePath = requireString(body, "sourcePath");
+    const result = repoUrl ? await syncKindFromGit({ projectPath, repoUrl, branch, kind: "rules", overwrite }) : await syncKindFromFolder({ projectPath, sourcePath, kind: "rules", overwrite });
+    res.json({ ok: true, result });
+  } catch (e) {
+    res.status(500).json({ error: e && e.message ? e.message : String(e) });
+  }
+});
+
+app.post("/api/syncSkills", async (req, res) => {
+  const body = req.body || {};
+  try {
+    const projectPath = normalizeProjectPath(requireString(body, "projectPath"));
+    const overwrite = requireBool(body, "overwrite");
+    const repoUrl = requireString(body, "repoUrl");
+    const branch = requireString(body, "branch") || "main";
+    const sourcePath = requireString(body, "sourcePath");
+    const result = repoUrl ? await syncKindFromGit({ projectPath, repoUrl, branch, kind: "skills", overwrite }) : await syncKindFromFolder({ projectPath, sourcePath, kind: "skills", overwrite });
+    res.json({ ok: true, result });
+  } catch (e) {
+    res.status(500).json({ error: e && e.message ? e.message : String(e) });
+  }
+});
+
+app.post("/api/syncRulesUpload", async (req, res) => {
+  const body = req.body || {};
+  try {
+    const projectPath = normalizeProjectPath(requireString(body, "projectPath"));
+    const overwrite = requireBool(body, "overwrite");
+    const { dir, cleanup } = await materializeUploadedFiles(body.files);
+    try {
+      const result = await syncKindFromFolder({ projectPath, sourcePath: dir, kind: "rules", overwrite });
+      res.json({ ok: true, result });
+    } finally {
+      await cleanup().catch(() => void 0);
+    }
+  } catch (e) {
+    res.status(500).json({ error: e && e.message ? e.message : String(e) });
+  }
+});
+
+app.post("/api/syncSkillsUpload", async (req, res) => {
+  const body = req.body || {};
+  try {
+    const projectPath = normalizeProjectPath(requireString(body, "projectPath"));
+    const overwrite = requireBool(body, "overwrite");
+    const { dir, cleanup } = await materializeUploadedFiles(body.files);
+    try {
+      const result = await syncKindFromFolder({ projectPath, sourcePath: dir, kind: "skills", overwrite });
+      res.json({ ok: true, result });
+    } finally {
+      await cleanup().catch(() => void 0);
+    }
+  } catch (e) {
+    res.status(500).json({ error: e && e.message ? e.message : String(e) });
+  }
+});
+
+app.post("/api/publish", async (req, res) => {
+  const body = req.body || {};
+  try {
+    const projectPath = normalizeProjectPath(requireString(body, "projectPath"));
+    const repoUrl = requireString(body, "repoUrl");
+    const branch = requireString(body, "branch") || "main";
+    const commitMessage = requireString(body, "commitMessage") || "Publish Synapse rules/skills";
+    const result = await core.publishSynapseToGit({ sourceRoot: projectPath, repoUrl, branch, commitMessage });
+    res.json({ ok: true, result });
+  } catch (e) {
+    res.status(500).json({ error: e && e.message ? e.message : String(e) });
+  }
+});
+
+app.post("/api/previewSyncUpload", async (req, res) => {
+  const body = req.body || {};
+  try {
+    const projectPath = normalizeProjectPath(requireString(body, "projectPath"));
+    const { dir, cleanup } = await materializeUploadedFiles(body.files);
+    try {
+      const result = await core.previewPresetSync({ targetRoot: projectPath, upstreamRoot: dir });
+      const sessionId = randomId();
+      previewSessions.set(sessionId, { createdAt: Date.now(), upstreamRoot: dir, cleanup });
+      res.json({ ok: true, sessionId, result });
+    } catch (e) {
+      await cleanup().catch(() => void 0);
+      throw e;
+    }
+  } catch (e) {
+    res.status(500).json({ error: e && e.message ? e.message : String(e) });
+  }
+});
+
+app.post("/api/previewSync", async (req, res) => {
+  const body = req.body || {};
+  try {
+    const projectPath = normalizeProjectPath(requireString(body, "projectPath"));
+    const repoUrl = requireString(body, "repoUrl");
+    const branch = requireString(body, "branch") || "main";
+    const sourcePath = requireString(body, "sourcePath");
 
     let upstreamRoot = null;
-    let sessionId = null;
+    let cleanup = null;
 
-    if (repoUrl && repoUrl.trim()) {
-      const { repoDir, cleanup } = await gitCloneToTemp(repoUrl.trim(), branch);
-
-      upstreamRoot = repoDir;
-      sessionId = randomId();
-      previewSessions.set(sessionId, { createdAt: Date.now(), upstreamRoot, cleanup, source: { repoUrl: repoUrl.trim(), branch } });
+    if (repoUrl) {
+      const cloned = await gitCloneToTemp({ repoUrl, branch });
+      upstreamRoot = cloned.repoDir;
+      cleanup = cloned.cleanup;
+    } else if (sourcePath) {
+      upstreamRoot = sourcePath;
     } else {
-      if (!sourcePath || !sourcePath.trim()) return sendJson(res, 400, { error: "sourcePath or repoUrl required" });
-      upstreamRoot = core.ensureAbsolute(sourcePath.trim());
-      sessionId = randomId();
-      previewSessions.set(sessionId, { createdAt: Date.now(), upstreamRoot, cleanup: null, source: { sourcePath: upstreamRoot } });
+      throw new Error("Select a source folder or provide a repo URL.");
     }
 
-    const result = await core.previewPresetSync({ targetRoot, upstreamRoot });
-    return sendJson(res, 200, { ok: true, sessionId, result });
-  }
-
-  if (url.pathname === "/api/previewSyncUpload") {
-    const files = body.files;
-    const { upstreamRoot, cleanup } = await writeUploadedFilesToTemp(files);
+    const result = await core.previewPresetSync({ targetRoot: projectPath, upstreamRoot });
     const sessionId = randomId();
-    previewSessions.set(sessionId, { createdAt: Date.now(), upstreamRoot, cleanup, source: { upload: true } });
-    const result = await core.previewPresetSync({ targetRoot, upstreamRoot });
-    return sendJson(res, 200, { ok: true, sessionId, result });
+    previewSessions.set(sessionId, { createdAt: Date.now(), upstreamRoot, cleanup });
+    res.json({ ok: true, sessionId, result });
+  } catch (e) {
+    res.status(500).json({ error: e && e.message ? e.message : String(e) });
   }
+});
 
-  if (url.pathname === "/api/previewSyncFile") {
-    const sessionId = typeof body.sessionId === "string" ? body.sessionId : "";
-    const id = typeof body.id === "string" ? body.id : "";
-    const diff3 = !!body.diff3;
-    if (!sessionId || !previewSessions.has(sessionId)) return sendJson(res, 410, { error: "Preview session expired. Run Preview again." });
-    if (!id) return sendJson(res, 400, { error: "id required" });
+app.post("/api/previewSyncFile", async (req, res) => {
+  const body = req.body || {};
+  try {
+    const projectPath = normalizeProjectPath(requireString(body, "projectPath"));
+    const sessionId = requireString(body, "sessionId");
+    const id = requireString(body, "id");
+    if (!sessionId || !previewSessions.has(sessionId)) throw new Error("Preview session expired. Run Preview again.");
+    if (!id || !id.includes(":")) throw new Error("Invalid item id.");
 
-    const session = previewSessions.get(sessionId);
     const idx = id.indexOf(":");
-    if (idx <= 0) return sendJson(res, 400, { error: "invalid id" });
     const kind = id.slice(0, idx);
     const relPosix = id.slice(idx + 1);
-
-    const result = await core.previewPresetFile({ targetRoot, upstreamRoot: session.upstreamRoot, kind, relPosix, diff3 });
-    return sendJson(res, 200, { ok: true, result });
-  }
-
-  if (url.pathname === "/api/previewSyncApply") {
-    const sessionId = typeof body.sessionId === "string" ? body.sessionId : "";
-    const selections = Array.isArray(body.selections) ? body.selections : [];
-    const confirmDelete = !!body.confirmDelete;
-    const diff3 = !!body.diff3;
-    if (!sessionId || !previewSessions.has(sessionId)) return sendJson(res, 410, { error: "Preview session expired. Run Preview again." });
+    if (kind !== "rules" && kind !== "skills") throw new Error("Invalid kind.");
 
     const session = previewSessions.get(sessionId);
-    const result = await core.applyPresetSync({ targetRoot, upstreamRoot: session.upstreamRoot, selections, diff3, confirmDelete });
-    return sendJson(res, 200, { ok: true, result });
+    const upstreamRoot = session.upstreamRoot;
+    const result = await core.previewPresetFile({ targetRoot: projectPath, upstreamRoot, kind, relPosix, diff3: true });
+    res.json({ ok: true, result });
+  } catch (e) {
+    res.status(500).json({ error: e && e.message ? e.message : String(e) });
   }
+});
 
-  if (url.pathname === "/api/previewSyncClose") {
-    const sessionId = typeof body.sessionId === "string" ? body.sessionId : "";
+app.post("/api/previewSyncApply", async (req, res) => {
+  const body = req.body || {};
+  try {
+    const projectPath = normalizeProjectPath(requireString(body, "projectPath"));
+    const sessionId = requireString(body, "sessionId");
+    const selections = Array.isArray(body.selections) ? body.selections : [];
+    const confirmDelete = requireBool(body, "confirmDelete");
+    const diff3 = requireBool(body, "diff3");
+    if (!sessionId || !previewSessions.has(sessionId)) throw new Error("Preview session expired. Run Preview again.");
+
+    const session = previewSessions.get(sessionId);
+    const result = await core.applyPresetSync({ targetRoot: projectPath, upstreamRoot: session.upstreamRoot, selections, diff3, confirmDelete });
+    broadcastSync(true, { phase: "preset_applied" });
+    res.json({ ok: true, result });
+  } catch (e) {
+    broadcastSync(false, { phase: "error", error: e && e.message ? e.message : String(e) });
+    res.status(500).json({ error: e && e.message ? e.message : String(e) });
+  }
+});
+
+app.post("/api/previewSyncClose", async (req, res) => {
+  const body = req.body || {};
+  try {
+    const sessionId = requireString(body, "sessionId");
     if (sessionId && previewSessions.has(sessionId)) {
       const s = previewSessions.get(sessionId);
       previewSessions.delete(sessionId);
       if (s && typeof s.cleanup === "function") await s.cleanup().catch(() => void 0);
     }
-    return sendJson(res, 200, { ok: true });
-  }
-
-  return sendJson(res, 404, { error: "Not found" });
-}
-
-async function handleRequest(req, res) {
-  try {
-    const url = new URL(req.url, "http://localhost");
-
-    if (url.pathname.startsWith("/api/")) {
-      return await handleApi(req, res, url);
-    }
-
-    if (req.method !== "GET") return send(res, 405, { "Content-Type": "text/plain; charset=utf-8" }, "Method not allowed");
-
-    const filePath = safePathFromPublic(url.pathname);
-    if (!filePath) return send(res, 400, { "Content-Type": "text/plain; charset=utf-8" }, "Bad request");
-    if (!filePath.startsWith(PUBLIC_DIR)) return send(res, 403, { "Content-Type": "text/plain; charset=utf-8" }, "Forbidden");
-
-    const st = await fsp.stat(filePath).catch(() => null);
-    if (!st || !st.isFile()) return send(res, 404, { "Content-Type": "text/plain; charset=utf-8" }, "Not found");
-
-    const data = await fsp.readFile(filePath);
-    return send(res, 200, { "Content-Type": contentType(filePath) }, data);
+    res.json({ ok: true });
   } catch (e) {
-    return sendJson(res, 500, { error: e && e.message ? e.message : String(e) });
-  }
-}
-
-const host = "127.0.0.1";
-const portRaw = process.env.PORT || "5177";
-const portNum = Number(portRaw);
-const port = Number.isFinite(portNum) && portNum >= 0 ? portNum : 5177;
-
-const server = http.createServer((req, res) => void handleRequest(req, res));
-server.on("upgrade", (req, socket) => { // NEW:
-  const ok = handleWsUpgrade(req, socket);
-  if (!ok) {
-    try {
-      socket.destroy();
-    } catch {
-      void 0;
-    }
+    res.status(500).json({ error: e && e.message ? e.message : String(e) });
   }
 });
-server.on("error", (err) => {
-  if (err && err.code === "EADDRINUSE") {
-    process.stderr.write(`Port ${port} is already in use. Try: node ./bin/trae-template.js dashboard --port=5178\n`);
-    process.exitCode = 1;
-    return;
-  }
-  process.stderr.write(`${err && err.message ? err.message : String(err)}\n`);
-  process.exitCode = 1;
-});
 
-server.listen(port, host, () => {
-  const addr = server.address();
-  const actualPort = addr && typeof addr === "object" ? addr.port : port;
-  process.stdout.write(`Dashboard running at http://${host}:${actualPort}/\n`);
+server.listen(PORT, () => {
+  process.stdout.write(`🧠 Synapse Dashboard running at http://localhost:${PORT}\n`);
 });

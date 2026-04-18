@@ -119,7 +119,7 @@ function publishPayload() {
     projectPath: $("projectPath").value.trim(),
     repoUrl: $("publishRepoUrl").value.trim(),
     branch: $("publishBranch").value.trim() || "main",
-    commitMessage: $("publishMessage").value.trim() || "Publish Trae rules/skills",
+    commitMessage: $("publishMessage").value.trim() || "Publish Synapse rules/skills", // UPDATED:
   };
 }
 
@@ -276,9 +276,9 @@ async function pickLocalFolderFiles(fileList) {
   for (const f of files) {
     const rel = f.webkitRelativePath || f.name;
     const posix = rel.replace(/\\/g, "/");
-    const isTrae = posix.includes("/.trae/rules/") || posix.includes("/.trae/skills/") || posix.startsWith(".trae/rules/") || posix.startsWith(".trae/skills/");
+    const isSynapse = posix.includes("/.synapse/rules/") || posix.includes("/.synapse/skills/") || posix.startsWith(".synapse/rules/") || posix.startsWith(".synapse/skills/"); // UPDATED:
     const isDirect = posix.includes("/rules/") || posix.includes("/skills/") || posix.startsWith("rules/") || posix.startsWith("skills/");
-    if (!isTrae && !isDirect) continue;
+    if (!isSynapse && !isDirect) continue;
     kept.push({ file: f, relPosix: posix });
   }
   const encoded = [];
@@ -303,13 +303,13 @@ async function pickLocalFolderFromDirectoryHandle(dirHandle) {
       if (entry.kind !== "file") continue;
       const relPosix = [...relParts, entry.name].join("/").replace(/\\/g, "/");
       const posix = `${folderName}/${relPosix}`;
-      const isTrae =
-        posix.includes("/.trae/rules/") ||
-        posix.includes("/.trae/skills/") ||
-        posix.startsWith(".trae/rules/") ||
-        posix.startsWith(".trae/skills/");
+      const isSynapse =
+        posix.includes("/.synapse/rules/") ||
+        posix.includes("/.synapse/skills/") ||
+        posix.startsWith(".synapse/rules/") ||
+        posix.startsWith(".synapse/skills/");
       const isDirect = posix.includes("/rules/") || posix.includes("/skills/") || posix.startsWith("rules/") || posix.startsWith("skills/");
-      if (!isTrae && !isDirect) continue;
+      if (!isSynapse && !isDirect) continue;
       const file = await entry.getFile();
       kept.push({ file, relPosix: posix });
     }
@@ -439,6 +439,7 @@ async function run(title, fn) {
     "btnPresetSelectCleanAuto",
     "btnPresetApplySelected",
     "btnSyncBrowse",
+    "btnProjectBrowse",
   ];
   const setDisabled = (disabled) => {
     for (const id of ids) {
@@ -504,6 +505,12 @@ window.addEventListener("DOMContentLoaded", async () => {
       if (syncWrap) syncWrap.title = "Sync status: disconnected";
       return;
     }
+    if (kind === "connected") {
+      syncDot.classList.add("syncDot--warn");
+      syncLabel.textContent = "Sync: connected";
+      if (syncWrap) syncWrap.title = "Sync status: connected";
+      return;
+    }
     syncDot.classList.add("syncDot--unknown");
     syncLabel.textContent = "Sync: unknown";
     if (syncWrap) syncWrap.title = "Sync status: unknown";
@@ -514,7 +521,7 @@ window.addEventListener("DOMContentLoaded", async () => {
       const wsUrl = `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws/sync-status`;
       const ws = new WebSocket(wsUrl);
       setSyncUi("warn");
-      ws.addEventListener("open", () => setSyncUi("warn"));
+      ws.addEventListener("open", () => setSyncUi("connected"));
       ws.addEventListener("close", () => setSyncUi("warn"));
       ws.addEventListener("error", () => setSyncUi("warn"));
       ws.addEventListener("message", (ev) => {
@@ -567,6 +574,17 @@ window.addEventListener("DOMContentLoaded", async () => {
   }
 
   $("projectPath").addEventListener("input", saveState);
+  $("btnProjectBrowse").addEventListener("click", () =>
+    run("pickProjectFolder", async () => {
+      const initialPath = $("projectPath").value.trim();
+      const res = await postJson("/api/pickFolder", { initialPath, title: "Select Project Folder" });
+      const picked = res && res.result && typeof res.result.path === "string" ? res.result.path.trim() : "";
+      if (!picked) return { ok: true, picked: false };
+      $("projectPath").value = picked;
+      saveState();
+      return { ok: true, picked: true };
+    })
+  );
   $("templateRoot").addEventListener("input", saveState);
   document.querySelectorAll('input[name="mode"]').forEach((el) => el.addEventListener("change", saveState));
   $("force").addEventListener("change", saveState);

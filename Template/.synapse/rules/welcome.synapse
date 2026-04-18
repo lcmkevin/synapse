@@ -1,0 +1,13 @@
+# Rule: Welcome to Synapse
+# Description: Default starter rule created by the Synapse template
+
+Always write clean, documented code
+Use meaningful variable names
+
+# Constraints:
+# @constraint **/*.js
+# @constraint **/*.ts
+
+# Skills:
+# @skill code-review
+

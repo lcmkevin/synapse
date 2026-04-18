@@ -1,0 +1,31 @@
+name: code-review
+version: 2
+
+description: Review code changes for correctness, security, readability, performance, and maintainability.
+
+Focus areas:
+- correctness
+- security
+- readability
+- performance
+
+Review checklist:
+- Confirm behavior matches requirements and edge cases are covered
+- Identify potential security issues (injection, auth, secrets, path traversal)
+- Validate error handling and user-facing messages
+- Check API contracts and backward-incompatible changes
+- Ensure naming, structure, and formatting follow project conventions
+- Look for unnecessary complexity and suggest simplifications
+- Flag performance hotspots (N+1, sync I/O, large allocations)
+- Verify tests (add/adjust) and mention what to run
+
+Output format:
+- Summary: 1-3 bullets describing overall risk and key changes
+- Issues: bullets with severity (blocker/major/minor) + file/path hints
+- Suggestions: concrete improvements (snippets only when necessary)
+- Tests: what to run + any missing test coverage
+
+Do not:
+- Introduce secrets or log sensitive data
+- Recommend unsafe commands or destructive actions without warning
+- Nitpick style when there are correctness/security issues

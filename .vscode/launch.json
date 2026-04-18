@@ -2,7 +2,7 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "Run Trae Rule Deployer Extension",
+      "name": "Run Synapse VS Code Extension",
       "type": "extensionHost",
       "request": "launch",
       "runtimeExecutable": "${execPath}",
@@ -14,6 +14,41 @@
         "${workspaceFolder}/extension/out/**/*.js"
       ],
       "preLaunchTask": "npm: compile"
+    },
+    {
+      "name": "Run Synapse CLI (help)",
+      "type": "node",
+      "request": "launch",
+      "program": "${workspaceFolder}/bin/synapse-unified.js",
+      "args": ["--help"],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "Run Synapse Dashboard",
+      "type": "node",
+      "request": "launch",
+      "program": "${workspaceFolder}/src/server.js",
+      "cwd": "${workspaceFolder}",
+      "env": { "SYNAPSE_PORT": "3456" },
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "Run Synapse MCP Server",
+      "type": "node",
+      "request": "launch",
+      "program": "${workspaceFolder}/standalone/dist/mcp-server.js",
+      "cwd": "${workspaceFolder}/standalone",
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "Run Synapse WS Server",
+      "type": "node",
+      "request": "launch",
+      "program": "${workspaceFolder}/standalone/dist/websocket-server.js",
+      "cwd": "${workspaceFolder}/standalone",
+      "env": { "WS_PORT": "3457" },
+      "console": "integratedTerminal"
     }
   ]
 }

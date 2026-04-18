@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Synapse Dashboard</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      padding: 20px;
+    }
+    .container { max-width: 1200px; margin: 0 auto; }
+    .header {
+      background: white;
+      border-radius: 16px;
+      padding: 24px;
+      margin-bottom: 24px;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+    }
+    .status-card { background: white; border-radius: 16px; padding: 24px; margin-bottom: 24px; }
+    .status-indicator {
+      display: inline-block;
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      margin-right: 8px;
+    }
+    .status-online { background: #10b981; box-shadow: 0 0 8px #10b981; }
+    .status-syncing { background: #f59e0b; animation: pulse 1s infinite; }
+    .status-offline { background: #ef4444; }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+    .button {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border: none;
+      padding: 12px 24px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 16px;
+      font-weight: 600;
+      margin: 8px 0;
+    }
+    .button:hover { transform: translateY(-2px); box-shadow: 0 5px 20px rgba(0,0,0,0.2); }
+    .rules-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px; }
+    .rule-card { background: white; border-radius: 12px; padding: 16px; transition: transform 0.2s; }
+    .rule-card:hover { transform: translateY(-4px); box-shadow: 0 10px 30px rgba(0,0,0,0.1); }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>🧠 Synapse Dashboard</h1>
+      <p>Intelligent rule orchestration for AI-powered development</p>
+    </div>
+
+    <div class="status-card">
+      <h3>Sync Status</h3>
+      <div id="syncStatus"><span class="status-indicator status-offline"></span> Connecting...</div>
+      <div id="lastSync">Last sync: Never</div>
+      <button class="button" onclick="triggerSync()">🔄 Sync Now</button>
+    </div>
+
+    <div class="status-card">
+      <h3>Rules</h3>
+      <div id="rulesCount">Loading...</div>
+      <div class="rules-grid" id="rulesList"></div>
+    </div>
+  </div>
+
+  <script>
+    let ws;
+
+    function setStatus(state, text) {
+      const el = document.getElementById('syncStatus');
+      const cls =
+        state === 'online' ? 'status-online' :
+        state === 'syncing' ? 'status-syncing' :
+        'status-offline';
+      el.innerHTML = '<span class="status-indicator ' + cls + '"></span> ' + text;
+    }
+
+    function connectWebSocket() {
+      const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+      ws = new WebSocket(proto + '://' + location.host + '/ws/sync-status');
+
+      ws.onopen = () => setStatus('online', 'Connected');
+      ws.onclose = () => setStatus('offline', 'Disconnected');
+      ws.onerror = () => setStatus('offline', 'Disconnected');
+
+      ws.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+        if (data && data.kind === 'sync') {
+          if (data.phase === 'syncing') {
+            setStatus('syncing', 'Syncing...');
+          } else if (data.ok) {
+            setStatus('online', 'Sync Complete');
+            document.getElementById('lastSync').innerHTML = 'Last sync: ' + new Date(data.at).toLocaleTimeString();
+            loadRules();
+          } else {
+            setStatus('offline', 'Sync Error');
+            document.getElementById('lastSync').innerHTML = 'Last sync: ' + new Date(data.at).toLocaleTimeString();
+          }
+        }
+      };
+    }
+
+    async function loadRules() {
+      const response = await fetch('/api/rules');
+      const data = await response.json();
+      document.getElementById('rulesCount').innerHTML = data.count + ' rule(s) found';
+
+      const rulesList = document.getElementById('rulesList');
+      if (!data.rules || data.rules.length === 0) {
+        rulesList.innerHTML = '<div class="rule-card">No rules yet. Run "synapse init" in VS Code.</div>';
+      } else {
+        rulesList.innerHTML = data.rules.map(rule =>
+          '<div class="rule-card"><strong>📄 ' + rule + '</strong></div>'
+        ).join('');
+      }
+    }
+
+    async function triggerSync() {
+      await fetch('/api/sync', { method: 'POST' });
+    }
+
+    connectWebSocket();
+    loadRules();
+  </script>
+</body>
+</html>

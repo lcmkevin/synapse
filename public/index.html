@@ -3,27 +3,30 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Trae Rule Dashboard</title>
+    <title>Synapse Dashboard</title>
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
     <div class="container">
       <header class="header">
         <div class="headerRow">
-          <h1>Trae Rule Dashboard</h1>
+          <h1>Synapse Dashboard</h1>
           <!-- NEW: sync status indicator -->
           <div class="syncStatus" title="Sync status: unknown">
             <span id="syncDot" class="syncDot syncDot--unknown"></span>
             <span id="syncLabel" class="syncLabel">Sync: unknown</span>
           </div>
         </div>
-        <div class="sub">Deploy and manage .trae rules in projects</div>
+        <div class="sub">Deploy and manage .synapse rules in projects</div>
       </header>
 
       <section class="panel">
         <div class="row">
           <label class="label">Project Path</label>
-          <input id="projectPath" class="input" placeholder="e.g. C:\path\to\project" />
+          <div class="inline">
+            <input id="projectPath" class="input" placeholder="e.g. C:\path\to\project" />
+            <button id="btnProjectBrowse" class="btn small" type="button">Select</button>
+          </div>
         </div>
 
         <div class="row">
@@ -101,7 +104,7 @@
         <div id="mergeGitFields">
           <div class="row">
             <label class="label">File Path (git)</label>
-            <input id="mergeGitFilePath" class="input" placeholder="e.g. .trae/rules/project_rules.md" />
+            <input id="mergeGitFilePath" class="input" placeholder="e.g. .synapse/rules/project_rules.md" />
           </div>
           <div class="row">
             <label class="label">Output Path (optional)</label>
@@ -112,15 +115,15 @@
         <div id="mergePathsFields" hidden>
           <div class="row">
             <label class="label">Base Path</label>
-            <input id="mergeBasePath" class="input" placeholder="relative to Project Path, e.g. .trae/rules/base.md" />
+            <input id="mergeBasePath" class="input" placeholder="relative to Project Path, e.g. .synapse/rules/base.md" />
           </div>
           <div class="row">
             <label class="label">Ours Path</label>
-            <input id="mergeOursPath" class="input" placeholder="relative to Project Path, e.g. .trae/rules/ours.md" />
+            <input id="mergeOursPath" class="input" placeholder="relative to Project Path, e.g. .synapse/rules/ours.md" />
           </div>
           <div class="row">
             <label class="label">Theirs Path</label>
-            <input id="mergeTheirsPath" class="input" placeholder="relative to Project Path, e.g. .trae/rules/theirs.md" />
+            <input id="mergeTheirsPath" class="input" placeholder="relative to Project Path, e.g. .synapse/rules/theirs.md" />
           </div>
           <div class="row">
             <label class="label">Output Path (optional)</label>
@@ -158,7 +161,7 @@
           <div class="row">
             <label class="label">Select Folder for preview check</label>
             <div class="inline" style="gap: 10px; width: 100%">
-              <input id="syncSourcePath" class="input" placeholder="e.g. C:\path\to\source (contains .trae/)" />
+              <input id="syncSourcePath" class="input" placeholder="e.g. C:\path\to\source (contains .synapse/)" />
               <button id="btnSyncBrowse" class="btn" title="Select Folder for preview check">Select</button>
               <input id="syncSourcePicker" type="file" webkitdirectory directory multiple hidden />
             </div>
@@ -172,7 +175,7 @@
         <div id="syncGitFields" hidden>
           <div class="row">
             <label class="label">Repo URL</label>
-            <input id="syncRepoUrl" class="input" placeholder="e.g. git@github.com:org/trae-rules.git" />
+            <input id="syncRepoUrl" class="input" placeholder="e.g. git@github.com:org/synapse-rules.git" />
           </div>
           <div class="row">
             <label class="label">Branch</label>
@@ -198,7 +201,7 @@
 
         <div class="row">
           <label class="label">Repo URL</label>
-          <input id="publishRepoUrl" class="input" placeholder="e.g. git@github.com:org/trae-rules.git" />
+          <input id="publishRepoUrl" class="input" placeholder="e.g. git@github.com:org/synapse-rules.git" />
         </div>
         <div class="row">
           <label class="label">Branch</label>
@@ -206,7 +209,7 @@
         </div>
         <div class="row">
           <label class="label">Commit Message</label>
-          <input id="publishMessage" class="input" placeholder="Publish Trae rules/skills" />
+          <input id="publishMessage" class="input" placeholder="Publish Synapse rules/skills" />
         </div>
 
         <div class="buttons">

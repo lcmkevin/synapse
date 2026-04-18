@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Synapse — Universal Rule Orchestration</title>
+    <meta name="description" content="Synapse compiles one set of master rules into multiple IDE formats, with token analysis, lazy-loaded skills, MCP, and WebSocket sync." />
+    <link rel="stylesheet" href="./css/style.css" />
+  </head>
+  <body>
+    <div class="topbar">
+      <div class="container">
+        <div class="nav">
+          <a class="brand" href="./index.html">
+            <span class="brand-mark"></span>
+            <span>Synapse</span>
+          </a>
+          <div class="nav-links">
+            <a href="#features">Features</a>
+            <a href="#how">How it works</a>
+            <a href="./pricing.html">Pricing</a>
+            <a href="./docs/index.html">Docs</a>
+          </div>
+          <div class="cta">
+            <a class="btn btn-secondary" href="./docs/index.html#getting-started">Get started</a>
+            <a class="btn btn-primary" href="./pricing.html">Upgrade</a>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <header class="hero">
+      <div class="container">
+        <div class="hero-grid">
+          <div>
+            <div class="kicker">
+              <span>Universal rules</span>
+              <span style="opacity:.7">•</span>
+              <span>Any IDE</span>
+              <span style="opacity:.7">•</span>
+              <span>Token-aware</span>
+            </div>
+            <h1 class="title">One rule system for every IDE.</h1>
+            <p class="subtitle">
+              Write rules once in <code>.synapse/</code>, then compile to Trae, Cursor, and future targets.
+              Get token/cost insights, convert large rules to lazy-loaded skills, and share via MCP and WebSocket.
+            </p>
+            <div class="hero-actions">
+              <a class="btn btn-primary" href="./docs/index.html#getting-started">Start in 2 minutes</a>
+              <a class="btn btn-secondary" href="#how">See the pipeline</a>
+            </div>
+          </div>
+          <div class="card">
+            <h3>Example pipeline</h3>
+            <code>.synapse/rules/*.synapse
+  ├─ compile → .trae/*.trae
+  ├─ compile → .cursor/rules/*.mdc
+  └─ serve → MCP + WebSocket</code>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <section id="features" class="section">
+      <div class="container">
+        <h2>What you get</h2>
+        <p class="muted">A single system that stays consistent across tools, teams, and budgets.</p>
+        <div class="grid-3">
+          <div class="feature">
+            <div class="pill">Adapters</div>
+            <h3>Multi-IDE compilation</h3>
+            <p>Compile master rules into IDE formats (Trae, Cursor) and extend to more adapters later.</p>
+          </div>
+          <div class="feature">
+            <div class="pill">Cost</div>
+            <h3>Token analysis</h3>
+            <p>Estimate token counts and per-session cost by model. Identify oversized rules quickly.</p>
+          </div>
+          <div class="feature">
+            <div class="pill">Optimize</div>
+            <h3>Lazy-loaded skills</h3>
+            <p>Convert large rules into skills that load only when needed, preserving constraints via stubs.</p>
+          </div>
+          <div class="feature">
+            <div class="pill">Sync</div>
+            <h3>WebSocket API</h3>
+            <p>Any IDE can connect for sync + rule updates. Great for JetBrains, Vim, Emacs, and custom tooling.</p>
+          </div>
+          <div class="feature">
+            <div class="pill">MCP</div>
+            <h3>MCP server</h3>
+            <p>Expose init/sync/list/analyze/create operations to MCP-compatible clients.</p>
+          </div>
+          <div class="feature">
+            <div class="pill">UI</div>
+            <h3>Dashboard + webviews</h3>
+            <p>Manage deploy/sync/preview workflows and see token/cost dashboards inside VS Code.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="how" class="section alt">
+      <div class="container">
+        <h2>How it works</h2>
+        <p class="muted">Keep one source of truth, generate outputs, and integrate everywhere.</p>
+        <div class="two-col">
+          <div class="panel">
+            <h3>CLI</h3>
+            <code>synapse init
+synapse sync --all
+synapse watch
+synapse dashboard</code>
+          </div>
+          <div class="panel">
+            <h3>Servers</h3>
+            <code>cd standalone
+npm install
+npm run build
+npm start       # MCP
+npm run start:ws</code>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <footer class="footer">
+      <div class="container">
+        <div style="display:flex;flex-wrap:wrap;gap:14px;align-items:center;justify-content:space-between">
+          <div>© Synapse</div>
+          <div style="display:flex;gap:12px">
+            <a href="./pricing.html">Pricing</a>
+            <a href="./docs/index.html">Docs</a>
+          </div>
+        </div>
+      </div>
+    </footer>
+
+    <script src="./js/main.js"></script>
+  </body>
+</html>
+

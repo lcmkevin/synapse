@@ -1,0 +1,57 @@
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;line-height:1.5;color:#0f172a;background:linear-gradient(180deg,#0b1020 0%,#0b1020 320px,#0b1020 320px,#ffffff 321px)}
+a{color:inherit;text-decoration:none}
+.container{max-width:1100px;margin:0 auto;padding:0 20px}
+.topbar{position:sticky;top:0;z-index:50;background:rgba(11,16,32,.72);backdrop-filter:blur(10px);border-bottom:1px solid rgba(255,255,255,.08)}
+.nav{display:flex;align-items:center;justify-content:space-between;padding:14px 0;color:#fff}
+.brand{display:flex;gap:10px;align-items:center;font-weight:700;letter-spacing:.2px}
+.brand-mark{width:28px;height:28px;border-radius:9px;background:linear-gradient(135deg,#6aa9ff 0%,#29d17d 100%)}
+.nav-links{display:flex;gap:16px;align-items:center;font-size:14px;color:rgba(255,255,255,.82)}
+.nav-links a{padding:8px 10px;border-radius:10px}
+.nav-links a:hover,.nav-links a.active{background:rgba(255,255,255,.1);color:#fff}
+.cta{display:flex;gap:10px;align-items:center}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;border-radius:12px;padding:10px 14px;font-weight:600;font-size:14px;border:1px solid transparent;cursor:pointer}
+.btn-primary{background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);color:#fff}
+.btn-primary:hover{filter:brightness(1.05)}
+.btn-secondary{background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.16);color:#fff}
+.btn-secondary:hover{background:rgba(255,255,255,.12)}
+.hero{padding:56px 0 36px;color:#fff}
+.hero-grid{display:grid;grid-template-columns:1.2fr .8fr;gap:28px;align-items:center}
+.kicker{display:inline-flex;gap:10px;align-items:center;padding:6px 10px;border-radius:999px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14);font-size:12px;color:rgba(255,255,255,.9)}
+.title{font-size:42px;line-height:1.1;margin:14px 0 10px}
+.subtitle{font-size:16px;color:rgba(255,255,255,.78);max-width:60ch}
+.hero-actions{margin-top:16px;display:flex;gap:12px;flex-wrap:wrap}
+.card{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:16px;padding:16px}
+.card h3{margin:0 0 10px;font-size:14px;color:rgba(255,255,255,.8);font-weight:600}
+.card code{display:block;white-space:pre-wrap;background:rgba(0,0,0,.35);border:1px solid rgba(255,255,255,.1);border-radius:12px;padding:12px;color:#e2e8f0;font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;font-size:12px}
+.section{padding:44px 0;background:#fff}
+.section.alt{background:#f8fafc}
+.section h2{margin:0 0 12px;font-size:26px}
+.muted{color:#475569}
+.grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:14px}
+.feature{border:1px solid #e2e8f0;border-radius:16px;padding:16px;background:#fff}
+.feature h3{margin:0 0 8px;font-size:16px}
+.feature p{margin:0;color:#475569;font-size:14px}
+.pill{display:inline-flex;align-items:center;gap:8px;padding:6px 10px;border-radius:999px;background:#eef2ff;color:#3730a3;font-weight:600;font-size:12px}
+.two-col{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:14px}
+.panel{border:1px solid #e2e8f0;border-radius:16px;padding:16px;background:#fff}
+.panel h3{margin:0 0 10px;font-size:16px}
+.panel code{display:block;white-space:pre-wrap;background:#0b1020;border-radius:12px;padding:12px;color:#e2e8f0;font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;font-size:12px}
+.pricing{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:14px}
+.price-card{border:1px solid #e2e8f0;border-radius:16px;padding:16px;background:#fff}
+.price-card.featured{border-color:#667eea;box-shadow:0 14px 40px rgba(102,126,234,.18)}
+.price{font-size:30px;font-weight:800;margin:8px 0}
+.list{margin:10px 0 0;padding:0;list-style:none;color:#475569;font-size:14px}
+.list li{margin:8px 0;padding-left:18px;position:relative}
+.list li:before{content:"•";position:absolute;left:0;color:#667eea}
+.footer{padding:26px 0;background:#0b1020;color:rgba(255,255,255,.78);border-top:1px solid rgba(255,255,255,.1)}
+.footer a{color:#fff;text-decoration:underline}
+@media (max-width: 900px){
+  .hero-grid{grid-template-columns:1fr}
+  .grid-3{grid-template-columns:1fr}
+  .two-col{grid-template-columns:1fr}
+  .pricing{grid-template-columns:1fr}
+  .title{font-size:34px}
+}
+
