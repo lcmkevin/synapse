@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Synapse Pricing</title>
+    <meta name="description" content="Synapse pricing: Free for personal use, Pro for token optimization, team sync, and history." />
+    <link rel="stylesheet" href="./css/style.css" />
+  </head>
+  <body>
+    <div class="topbar">
+      <div class="container">
+        <div class="nav">
+          <a class="brand" href="./index.html">
+            <span class="brand-mark"></span>
+            <span>Synapse</span>
+          </a>
+          <div class="nav-links">
+            <a href="./index.html#features">Features</a>
+            <a href="./index.html#how">How it works</a>
+            <a class="active" href="./pricing.html">Pricing</a>
+            <a href="./docs/index.html">Docs</a>
+          </div>
+          <div class="cta">
+            <a class="btn btn-secondary" href="./docs/index.html#getting-started">Get started</a>
+            <a class="btn btn-primary" href="./docs/index.html#upgrade">Upgrade</a>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <header class="hero">
+      <div class="container">
+        <div class="hero-grid">
+          <div>
+            <div class="kicker"><span>Freemium</span><span style="opacity:.7">•</span><span>Upgrade when it pays for itself</span></div>
+            <h1 class="title">Pricing that matches ROI.</h1>
+            <p class="subtitle">
+              Start free for personal projects. Upgrade when token costs and team workflows justify automation.
+            </p>
+          </div>
+          <div class="card">
+            <h3>Rule outputs</h3>
+            <code>Free: compile to Trae + Cursor
+Pro: team sharing + history (optional)</code>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <section class="section">
+      <div class="container">
+        <h2>Plans</h2>
+        <p class="muted">Pro features in this repo are currently mock-gated and will evolve with a real licensing backend.</p>
+        <div class="pricing">
+          <div class="price-card">
+            <div class="pill">Free</div>
+            <div class="price">$0</div>
+            <div class="muted">Personal dashboard + core compilation.</div>
+            <ul class="list">
+              <li>Adapters: Trae + Cursor</li>
+              <li>Token analysis (current snapshot)</li>
+              <li>Cost dashboard (current snapshot)</li>
+              <li>Lazy-skill suggestions</li>
+            </ul>
+          </div>
+          <div class="price-card featured">
+            <div class="pill">Pro</div>
+            <div class="price">$9<span style="font-size:14px;font-weight:700">/mo</span></div>
+            <div class="muted">Automation and collaboration.</div>
+            <ul class="list">
+              <li>Convert large rules to lazy-loaded skills</li>
+              <li>Cost history (stored per user)</li>
+              <li>Team sharing (mock in current build)</li>
+              <li>Priority roadmap items</li>
+            </ul>
+          </div>
+          <div class="price-card">
+            <div class="pill">Team</div>
+            <div class="price">TBD</div>
+            <div class="muted">Central management and policy.</div>
+            <ul class="list">
+              <li>Managed rule registry</li>
+              <li>Org-wide history + audit</li>
+              <li>Access controls</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section alt" id="faq">
+      <div class="container">
+        <h2>FAQ</h2>
+        <div class="two-col">
+          <div class="panel">
+            <h3>What is a “session cost”?</h3>
+            <p class="muted">A rough estimate of tokens contributed by always-on rules in a typical chat/session.</p>
+          </div>
+          <div class="panel">
+            <h3>What does “lazy-loaded skill” mean?</h3>
+            <p class="muted">Large content moves into a skill file; a stub rule keeps constraints and references the skill.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <footer class="footer">
+      <div class="container">
+        <div style="display:flex;flex-wrap:wrap;gap:14px;align-items:center;justify-content:space-between">
+          <div>© Synapse</div>
+          <div style="display:flex;gap:12px">
+            <a href="./index.html">Home</a>
+            <a href="./docs/index.html">Docs</a>
+          </div>
+        </div>
+      </div>
+    </footer>
+
+    <script src="./js/main.js"></script>
+  </body>
+</html>
+

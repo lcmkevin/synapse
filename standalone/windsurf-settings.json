@@ -1,0 +1,12 @@
+{
+  "mcp": {
+    "servers": [
+      {
+        "name": "synapse",
+        "command": "node",
+        "args": ["./standalone/dist/mcp-server.js"]
+      }
+    ]
+  }
+}
+

@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Synapse Documentation</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400;14..32,500;14..32,600;14..32,700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../css/style.css">
+    <style>
+        .docs-container {
+            display: flex;
+            max-width: 1280px;
+            margin: 100px auto 0;
+            padding: 2rem;
+            gap: 2rem;
+        }
+        .docs-sidebar {
+            width: 280px;
+            position: sticky;
+            top: 100px;
+            height: fit-content;
+        }
+        .docs-sidebar a {
+            display: block;
+            padding: 0.5rem 0;
+            color: var(--dark);
+            text-decoration: none;
+        }
+        .docs-sidebar a:hover {
+            color: var(--primary);
+        }
+        .docs-content {
+            flex: 1;
+        }
+        .docs-content pre {
+            background: var(--dark);
+            color: white;
+            padding: 1rem;
+            border-radius: 8px;
+            overflow-x: auto;
+        }
+        .docs-content code {
+            background: var(--gray);
+            padding: 0.2rem 0.4rem;
+            border-radius: 4px;
+            font-family: monospace;
+        }
+        @media (max-width: 768px) {
+            .docs-container {
+                flex-direction: column;
+            }
+            .docs-sidebar {
+                width: 100%;
+                position: static;
+            }
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-container">
+            <a href="../index.html" class="logo">🧠 Synapse</a>
+            <div class="nav-links">
+                <a href="../index.html#features">Features</a>
+                <a href="../index.html#pricing">Pricing</a>
+                <a href="./">Docs</a>
+                <a href="https://github.com">GitHub</a>
+                <a href="../index.html#install" class="btn btn-primary">Install</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="docs-container">
+        <div class="docs-sidebar">
+            <h4>Getting Started</h4>
+            <a href="#install">Installation</a>
+            <a href="#quick-start">Quick Start</a>
+            <a href="#format">Synapse Format</a>
+            <h4>Features</h4>
+            <a href="#sync">Syncing Rules</a>
+            <a href="#token">Token Analysis</a>
+            <a href="#conflict">Conflict Detection</a>
+        </div>
+        <div class="docs-content">
+            <h1>Synapse Documentation</h1>
+            
+            <h2 id="install">Installation</h2>
+            <pre><code>npm install -g synapse-cli</code></pre>
+            
+            <h2 id="quick-start">Quick Start</h2>
+            <pre><code>synapse init
+echo '# Rule: My First Rule\nAlways use TypeScript' > .synapse/rules/my-rule.synapse
+synapse sync --all</code></pre>
+            
+            <h2 id="format">Synapse Rule Format</h2>
+            <pre><code># Rule: Rule Name
+# Description: What this does
+
+Your instructions here
+
+# Constraints:
+# @constraint **/*.ts
+
+# Skills:
+# @skill code-review</code></pre>
+        </div>
+    </div>
+
+    <footer class="footer">
+        <div class="footer-bottom">
+            <p>© 2024 Synapse Labs</p>
+        </div>
+    </footer>
+</body>
+</html>

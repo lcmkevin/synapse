@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "synapse": {
+      "command": "node",
+      "args": ["C:\\\\absolute\\\\path\\\\to\\\\synapse\\\\standalone\\\\dist\\\\mcp-server.js"],
+      "env": {}
+    }
+  }
+}
+

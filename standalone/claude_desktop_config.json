@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "synapse": {
+      "command": "node",
+      "args": ["/absolute/path/to/synapse/standalone/dist/mcp-server.js"]
+    }
+  }
+}
+

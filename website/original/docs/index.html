@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Synapse Docs</title>
+    <meta name="description" content="Synapse documentation: install, init, sync, adapters, token analysis, MCP and WebSocket integration." />
+    <link rel="stylesheet" href="../css/style.css" />
+  </head>
+  <body>
+    <div class="topbar">
+      <div class="container">
+        <div class="nav">
+          <a class="brand" href="../index.html">
+            <span class="brand-mark"></span>
+            <span>Synapse</span>
+          </a>
+          <div class="nav-links">
+            <a href="../index.html#features">Features</a>
+            <a href="../pricing.html">Pricing</a>
+            <a class="active" href="./index.html">Docs</a>
+          </div>
+          <div class="cta">
+            <a class="btn btn-secondary" href="../pricing.html">Upgrade</a>
+            <a class="btn btn-primary" href="#getting-started">Start</a>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <header class="hero">
+      <div class="container">
+        <div class="hero-grid">
+          <div>
+            <div class="kicker"><span>Docs</span><span style="opacity:.7">•</span><span>CLI + Extension + Servers</span></div>
+            <h1 class="title">Get started with Synapse</h1>
+            <p class="subtitle">A practical guide to the folder structure, commands, and integrations.</p>
+          </div>
+          <div class="card">
+            <h3>Project layout</h3>
+            <code>.synapse/
+  rules/*.synapse
+  skills/*.skill
+  config.json</code>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <section id="getting-started" class="section">
+      <div class="container">
+        <h2>Getting started</h2>
+        <div class="two-col">
+          <div class="panel">
+            <h3>Install (local dev)</h3>
+            <code>npm install
+node .\bin\synapse-unified.js --help</code>
+          </div>
+          <div class="panel">
+            <h3>Initialize + sync</h3>
+            <code>synapse init
+synapse sync --all
+synapse watch</code>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="adapters" class="section alt">
+      <div class="container">
+        <h2>Adapters</h2>
+        <p class="muted">Write master rules once, compile to target IDE formats.</p>
+        <div class="two-col">
+          <div class="panel">
+            <h3>Trae output</h3>
+            <code>.trae/*.trae</code>
+          </div>
+          <div class="panel">
+            <h3>Cursor output</h3>
+            <code>.cursor/rules/*.mdc</code>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="token" class="section">
+      <div class="container">
+        <h2>Token analysis</h2>
+        <p class="muted">Inside VS Code, run token analysis and open the Cost Dashboard view.</p>
+        <div class="two-col">
+          <div class="panel">
+            <h3>Commands</h3>
+            <code>Synapse: Analyze Tokens
+Synapse: Convert Large Rules to Skills</code>
+          </div>
+          <div class="panel" id="upgrade">
+            <h3>Pro features</h3>
+            <code>Synapse: Upgrade to Pro</code>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="servers" class="section alt">
+      <div class="container">
+        <h2>MCP + WebSocket</h2>
+        <p class="muted">Expose Synapse to any MCP client (Cursor/Windsurf/Claude Desktop) and any IDE via WebSocket.</p>
+        <div class="two-col">
+          <div class="panel">
+            <h3>MCP server (stdio)</h3>
+            <code>cd standalone
+npm install
+npm run build
+npm start</code>
+          </div>
+          <div class="panel">
+            <h3>WebSocket server</h3>
+            <code>cd standalone
+npm run start:ws
+
+GET  http://localhost:3457/health
+POST http://localhost:3457/api/sync</code>
+          </div>
+        </div>
+
+        <div class="panel" style="margin-top:14px">
+          <h3>MCP config examples</h3>
+          <code>Cursor:   standalone/cursor-mcp-config.json
+Windsurf: standalone/windsurf-settings.json
+Claude:   standalone/claude_desktop_config.json</code>
+        </div>
+      </div>
+    </section>
+
+    <footer class="footer">
+      <div class="container">
+        <div style="display:flex;flex-wrap:wrap;gap:14px;align-items:center;justify-content:space-between">
+          <div>© Synapse</div>
+          <div style="display:flex;gap:12px">
+            <a href="../index.html">Home</a>
+            <a href="../pricing.html">Pricing</a>
+          </div>
+        </div>
+      </div>
+    </footer>
+
+    <script src="../js/main.js"></script>
+  </body>
+</html>
+

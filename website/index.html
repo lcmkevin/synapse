@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Choose Synapse Experience</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 2rem;
+        }
+        .container { max-width: 900px; text-align: center; }
+        h1 { font-size: 3rem; color: white; margin-bottom: 1rem; }
+        .subtitle { color: rgba(255,255,255,0.9); margin-bottom: 3rem; }
+        .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 2rem; }
+        .card {
+            background: white;
+            border-radius: 24px;
+            padding: 2rem;
+            text-decoration: none;
+            transition: transform 0.2s;
+        }
+        .card:hover { transform: translateY(-8px); }
+        .card-icon { font-size: 3rem; margin-bottom: 1rem; }
+        .card h2 { margin-bottom: 0.5rem; color: #333; }
+        .card p { color: #666; }
+        .badge { display: inline-block; background: #e0e0e0; padding: 0.25rem 0.75rem; border-radius: 20px; font-size: 0.75rem; margin-top: 1rem; }
+        .note { color: rgba(255,255,255,0.7); margin-top: 3rem; font-size: 0.875rem; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧠 Synapse</h1>
+        <p class="subtitle">Choose your website experience</p>
+        <div class="cards">
+            <a href="original/" class="card">
+                <div class="card-icon">📄</div>
+                <h2>Original Design</h2>
+                <p>Clean, simple, and fast</p>
+                <span class="badge">Stable</span>
+            </a>
+            <a href="qwik/" class="card">
+                <div class="card-icon">✨</div>
+                <h2>Qwik Design</h2>
+                <p>Modern glassmorphism with animations</p>
+                <span class="badge">New</span>
+            </a>
+        </div>
+        <div class="note">💡 Both versions have the same content. Choose your preferred style.</div>
+    </div>
+</body>
+</html>
