@@ -64,7 +64,7 @@
                 <a href="../index.html#features">Features</a>
                 <a href="../index.html#pricing">Pricing</a>
                 <a href="./">Docs</a>
-                <a href="https://github.com">GitHub</a>
+                <a href="https://github.com/lcmkevin/synapse">GitHub</a>
                 <a href="../index.html#install" class="btn btn-primary">Install</a>
             </div>
         </div>
@@ -76,10 +76,14 @@
             <a href="#install">Installation</a>
             <a href="#quick-start">Quick Start</a>
             <a href="#format">Synapse Format</a>
+            <a href="#vscode">VS Code</a>
+            <a href="#cli">CLI</a>
             <h4>Features</h4>
             <a href="#sync">Syncing Rules</a>
             <a href="#token">Token Analysis</a>
-            <a href="#conflict">Conflict Detection</a>
+            <a href="#dashboard">Cost Dashboard</a>
+            <a href="#pro">Pro License</a>
+            <a href="#servers">MCP + WebSocket</a>
         </div>
         <div class="docs-content">
             <h1>Synapse Documentation</h1>
@@ -103,12 +107,56 @@ Your instructions here
 
 # Skills:
 # @skill code-review</code></pre>
+
+            <h2 id="vscode">VS Code Extension</h2>
+            <p>Use the extension commands for daily workflows:</p>
+            <pre><code>Command Palette → Synapse: Initialize Project
+Command Palette → Synapse: Sync Rules
+Command Palette → Synapse: Analyze Tokens</code></pre>
+
+            <h2 id="cli">CLI</h2>
+            <p>Use the CLI for automation and CI:</p>
+            <pre><code>synapse init
+synapse sync --all
+synapse watch</code></pre>
+
+            <h2 id="sync">Syncing Rules</h2>
+            <p>Synapse keeps one source of truth in <code>.synapse/</code> and compiles outputs for enabled IDE targets.</p>
+            <pre><code>.synapse/
+  rules/   # master rules
+  skills/  # lazy-loaded skills (Pro)</code></pre>
+
+            <h2 id="token">Token Analysis</h2>
+            <p>Analyze token usage and estimated cost per session to find the biggest wins quickly.</p>
+
+            <h2 id="dashboard">Cost Dashboard</h2>
+            <p>Open the “Cost Dashboard” sidebar view to see totals, top rules, and recommendations.</p>
+
+            <h2 id="pro">Pro License</h2>
+            <p>Free tier is limited to 2 enabled IDE targets. Pro unlocks:</p>
+            <pre><code>- Unlimited targets
+- Convert large rules to lazy-loaded skills
+- Additional Pro-only capabilities</code></pre>
+            <p>To activate Pro, use:</p>
+            <pre><code>Command Palette → Synapse: Upgrade to Pro
+Enter License Key</code></pre>
+
+            <h2 id="servers">MCP + WebSocket</h2>
+            <p>Run standalone servers to integrate with external tools:</p>
+            <pre><code>cd standalone
+npm install
+npm run build
+npm start       # MCP server
+npm run start:ws</code></pre>
+
+            <h2 id="team">Team</h2>
+            <p>Team workflows are planned, including shared rulebases and audit logs.</p>
         </div>
     </div>
 
     <footer class="footer">
         <div class="footer-bottom">
-            <p>© 2024 Synapse Labs</p>
+            <p>© 2026 Labs Synapse</p>
         </div>
     </footer>
 </body>
