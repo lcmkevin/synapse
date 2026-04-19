@@ -1,12 +1,41 @@
+# Dependencies
 node_modules/
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
+package-lock.json
+**/.vscode-test/
+.vercel/
+
+# Build outputs
+dist/
+out/
+*.vsix
+
+# IDE
+.vscode/
+.idea/
+
+# OS
 .DS_Store
 Thumbs.db
-.trae/
 
-# Keep the extension private/out of the open-source repo
-extension/
-PAID_EXTENSION_FEATURES.md
+# Secrets
+.env
+*.key
+*.pem
+
+# Logs
+*.log
+npm-debug.log*
+
+# Temporary files
+*.tmp
+*.temp
+
+# Synapse local
+.synapse/
+.trae/
+.cursor/
+.windsurf/
+.cline/
+
+# Pro features (private)
+packages/pro/

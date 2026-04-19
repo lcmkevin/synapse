@@ -1,0 +1,12 @@
+node_modules/.bin
+node_modules/@types
+.gitignore
+*.ts
+tsconfig.json
+.vscode-test/
+.vscode/
+src/
+out/test/
+**/*.vsix
+Template/**
+

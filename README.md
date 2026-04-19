@@ -60,3 +60,15 @@ Then open:
 - Connect: `ws://localhost:3457?ide=<name>&workspace=<abs path>`
 - Health: `GET http://localhost:3457/health`
 - HTTP sync: `POST http://localhost:3457/api/sync` with JSON body `{ "target": "all|trae|cursor", "workspace": "..." }`
+
+## Launch Status
+
+| Metric | Target | Current |
+|--------|--------|---------|
+| GitHub Stars | 500 | - |
+| VS Code Installs | 5,000 | - |
+| Discord Members | 200 | - |
+| Pro Users | 50 | - |
+| Monthly Revenue | $450 | - |
+
+Detailed launch execution checklist: [LAUNCH_CHECKLIST.md](file:///c:/MyProgram/Trae/LAUNCH_CHECKLIST.md)
