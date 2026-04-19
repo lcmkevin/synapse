@@ -6,7 +6,7 @@
     --dark: #0F172A; 
     --dark-soft: #1E293B; 
     --light: #F8FAFC; 
-    --gray: #E2E8F0; 
+    --gray: #E2E8FF; 
     --success: #10B981; 
     --warning: #F59E0B; 
     --danger: #EF4444; 
@@ -515,4 +515,3 @@ body {
         transform: scale(1); 
     } 
 }
-
