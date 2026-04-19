@@ -12,8 +12,10 @@ Synapse uses a project-local master folder:
 
 - Author rules in `.synapse/rules/*.synapse`
 - Run `Synapse: Sync Rules` (VS Code) to compile to IDE formats:
-  - Trae: `.trae/*.trae`
+  - Trae: `.trae/rules/*.md`
   - Cursor: `.cursor/rules/*.mdc`
+  - Windsurf: `.windsurf/*.windsurfrules`
+  - Cline: `.clinerules/*.md`
 - Use the dashboard for deploy/status/sync/preview workflows.
 
 ## Quick Start (CLI)
@@ -41,6 +43,7 @@ Then open:
 - Run: press `F5` to open the Extension Development Host
 - Commands:
   - `Synapse: Initialize Project`
+  - `Synapse: Import Rules from IDE`
   - `Synapse: Sync Rules`
   - `Synapse: Add Target IDE`
 

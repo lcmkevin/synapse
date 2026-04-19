@@ -143,6 +143,7 @@ Your instructions here
             <h2 id="vscode">VS Code Extension</h2>
             <p>Use the extension commands for daily workflows:</p>
             <pre><code>Command Palette → Synapse: Initialize Project
+Command Palette → Synapse: Import Rules from IDE
 Command Palette → Synapse: Sync Rules
 Command Palette → Synapse: Analyze Tokens</code></pre>
 
@@ -155,8 +156,13 @@ synapse watch</code></pre>
             <h2 id="sync">Syncing Rules</h2>
             <p>Synapse keeps one source of truth in <code>.synapse/</code> and compiles outputs for enabled IDE targets.</p>
             <pre><code>.synapse/
-  rules/   # master rules
-  skills/  # lazy-loaded skills (Pro)</code></pre>
+  rules/        # master rules
+  skills/       # lazy-loaded skills (Pro)
+
+.trae/rules/    # Trae output (.md)
+.cursor/rules/  # Cursor output (.mdc)
+.windsurf/      # Windsurf output (.windsurfrules)
+.clinerules/    # Cline output (.md)</code></pre>
 
             <h2 id="token">Token Analysis</h2>
             <p>Analyze token usage and estimated cost per session to find the biggest wins quickly.</p>
