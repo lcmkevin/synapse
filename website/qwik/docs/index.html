@@ -110,6 +110,7 @@
             <a href="#format">Synapse Format</a>
             <a href="#vscode">VS Code</a>
             <a href="#cli">CLI</a>
+            <a href="#binaries">Native Binaries</a>
             <h4>Features</h4>
             <a href="#sync">Syncing Rules</a>
             <a href="#token">Token Analysis</a>
@@ -152,6 +153,14 @@ Command Palette → Synapse: Analyze Tokens</code></pre>
             <pre><code>synapse init
 synapse sync --all
 synapse watch</code></pre>
+
+            <h2 id="binaries">Native Binaries</h2>
+            <p>You can build standalone executables with <code>pkg</code> (no Node.js required for end users).</p>
+            <pre><code>npm install
+npm run build:binary:win
+
+# outputs in dist/</code></pre>
+            <p>On GitHub, binaries are built by CI when you push a tag like <code>v0.1.0</code>.</p>
 
             <h2 id="sync">Syncing Rules</h2>
             <p>Synapse keeps one source of truth in <code>.synapse/</code> and compiles outputs for enabled IDE targets.</p>
