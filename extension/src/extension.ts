@@ -10,6 +10,8 @@ import { AIModel, TokenCounter } from "./features/tokenAnalysis/tokenCounter";
 import { SkillConverter } from "./features/tokenAnalysis/skillConverter";
 import { CostDashboardProvider } from "./features/costDashboard";
 import { LicenseManager } from "./license";
+import { ImportScanner } from "./features/importScanner";
+import { FormatConverter } from "./features/formatConverter";
 
 let tokenCounter: TokenCounter | null = null;
 
@@ -30,6 +32,8 @@ export async function activate(context: vscode.ExtensionContext) {
   let skillConverter = new SkillConverter(context);
   let wsClient: WebSocket | null = null;
   const isProUser = () => license.isProUser();
+  const importScanner = new ImportScanner();
+  const formatConverter = new FormatConverter();
 
   function connectToSynapseWS(workspaceRoot: string) {
     const port = vscode.workspace.getConfiguration("synapse").get("wsPort", 3457);
@@ -68,6 +72,64 @@ export async function activate(context: vscode.ExtensionContext) {
     const synapsePath = path.join(workspaceRoot, ".synapse");
 
     try {
+      await fs.access(synapsePath);
+      vscode.window.showInformationMessage("Synapse already initialized");
+      return;
+    } catch (error) {
+      void error;
+    }
+
+    const detectedRules = await importScanner.scanWorkspace(workspaceRoot);
+    const uniqueIdes = Array.from(new Set(detectedRules.map((r) => r.ide))).join(", ");
+
+    let importedCount = 0;
+    if (detectedRules.length > 0) {
+      const importChoice = await vscode.window.showInformationMessage(
+        `Found ${detectedRules.length} existing rule(s) from ${uniqueIdes}. Import to Synapse?`,
+        "Import All",
+        "Select Rules",
+        "Skip"
+      );
+
+      let rulesToImport = detectedRules;
+      if (importChoice === "Select Rules") {
+        const selected = await vscode.window.showQuickPick(
+          detectedRules.map((r) => ({
+            label: r.suggestedName,
+            description: `from ${r.ide}`,
+            picked: true,
+            rule: r,
+          })),
+          { canPickMany: true, placeHolder: "Select rules to import" }
+        );
+        if (!selected) return;
+        rulesToImport = selected.map((s: any) => s.rule);
+      }
+
+      if (importChoice === "Import All" || importChoice === "Select Rules") {
+        await fs.mkdir(path.join(synapsePath, "rules"), { recursive: true });
+        await fs.mkdir(path.join(synapsePath, "skills"), { recursive: true });
+
+        const config = {
+          version: "1.0",
+          masterPath: ".synapse/",
+          createdAt: new Date().toISOString(),
+        };
+        await fs.writeFile(path.join(synapsePath, "config.json"), JSON.stringify(config, null, 2));
+
+        for (const rule of rulesToImport) {
+          const converted = formatConverter.convertToSynapse(rule);
+          const targetPath = path.join(synapsePath, "rules", rule.suggestedName);
+          await fs.writeFile(targetPath, converted, "utf-8");
+        }
+
+        importedCount = rulesToImport.length;
+        vscode.window.showInformationMessage(`✅ Imported ${importedCount} rule(s) to .synapse/`);
+        return;
+      }
+    }
+
+    try {
       await fs.mkdir(path.join(synapsePath, "rules"), { recursive: true });
       await fs.mkdir(path.join(synapsePath, "skills"), { recursive: true });
 
@@ -93,10 +155,44 @@ Use meaningful variable names
 `;
       await fs.writeFile(path.join(synapsePath, "rules", "welcome.synapse"), exampleRule);
 
-      vscode.window.showInformationMessage("✅ Synapse initialized! Created .synapse/ folder");
+      vscode.window.showInformationMessage("✅ Synapse initialized with example rule");
     } catch (error) {
       vscode.window.showErrorMessage(`Failed to initialize: ${error}`);
     }
+  });
+
+  const importFromIdeCommand = vscode.commands.registerCommand("synapse.importFromIDE", async () => {
+    const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+    if (!workspaceRoot) return;
+
+    const detectedRules = await importScanner.scanWorkspace(workspaceRoot);
+    if (detectedRules.length === 0) {
+      vscode.window.showInformationMessage("No existing IDE rules found");
+      return;
+    }
+
+    const selected = await vscode.window.showQuickPick(
+      detectedRules.map((r) => ({
+        label: r.suggestedName,
+        description: `from ${r.ide} (${r.originalPath})`,
+        picked: true,
+        rule: r,
+      })),
+      { canPickMany: true, placeHolder: "Select rules to import" }
+    );
+
+    if (!selected) return;
+
+    const synapseRulesPath = path.join(workspaceRoot, ".synapse", "rules");
+    await fs.mkdir(synapseRulesPath, { recursive: true });
+
+    for (const item of selected) {
+      const rule = (item as any).rule;
+      const converted = formatConverter.convertToSynapse(rule);
+      await fs.writeFile(path.join(synapseRulesPath, rule.suggestedName), converted, "utf-8");
+    }
+
+    vscode.window.showInformationMessage(`✅ Imported ${selected.length} rule(s)`);
   });
 
   const syncCommand = vscode.commands.registerCommand("synapse.sync", async () => {
@@ -342,6 +438,7 @@ Use meaningful variable names
 
   context.subscriptions.push(
     initCommand,
+    importFromIdeCommand,
     syncCommand,
     addTargetCommand, // NEW:
     analyzeTokensCommand,

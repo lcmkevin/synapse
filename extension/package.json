@@ -60,7 +60,8 @@
     "onCommand:synapse.upgradePro",
     "onCommand:synapse.target.add",
     "onCommand:synapse.ws.connect",
-    "onCommand:synapse.ws.disconnect"
+    "onCommand:synapse.ws.disconnect",
+    "onCommand:synapse.importFromIDE"
   ],
   "main": "./out/extension.js",
   "contributes": {
@@ -113,6 +114,11 @@
       {
         "command": "synapse.ws.disconnect",
         "title": "Synapse: Disconnect WS Sync",
+        "category": "Synapse"
+      },
+      {
+        "command": "synapse.importFromIDE",
+        "title": "Synapse: Import Rules from IDE",
         "category": "Synapse"
       }
     ],
