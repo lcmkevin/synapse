@@ -6,6 +6,8 @@ import * as path from "path";
 import { IDEAdapter, SynapseRule, CompilationResult } from "./adapters/adapter.interface";
 import { TraeAdapter } from "./adapters/trae.adapter";
 import { CursorAdapter } from "./adapters/cursor.adapter";
+import { WindsurfAdapter } from "./adapters/windsurf.adapter";
+import { ClineAdapter } from "./adapters/cline.adapter";
 
 export class AdapterManager {
   private adapters: Map<string, IDEAdapter> = new Map();
@@ -19,8 +21,12 @@ export class AdapterManager {
   private registerAdapters(): void {
     const trae = new TraeAdapter();
     const cursor = new CursorAdapter();
+    const windsurf = new WindsurfAdapter();
+    const cline = new ClineAdapter();
     this.adapters.set(trae.id, trae);
     this.adapters.set(cursor.id, cursor);
+    this.adapters.set(windsurf.id, windsurf);
+    this.adapters.set(cline.id, cline);
   }
 
   private async loadEnabledTargets(): Promise<void> {
@@ -92,8 +98,49 @@ export class AdapterManager {
   }
 
   private async parseRule(content: string, filePath: string): Promise<SynapseRule> {
-    const traeAdapter = new TraeAdapter();
-    return await traeAdapter.parse(content, filePath);
+    return this.parseSynapseRule(content, filePath);
+  }
+
+  private parseSynapseRule(content: string, filePath: string): SynapseRule {
+    const nameMatch = content.match(/^\s*#\s*Rule:\s*(.+)\s*$/im);
+    const descMatch = content.match(/^\s*#\s*Description:\s*(.+)\s*$/im);
+
+    const constraints: string[] = [];
+    const skills: string[] = [];
+
+    const lines = content.split(/\r?\n/);
+    for (const line of lines) {
+      const constraintMatch = line.match(/^\s*#\s*@constraint\s+(.+)\s*$/i);
+      if (constraintMatch) constraints.push(`@constraint ${constraintMatch[1].trim()}`);
+
+      const skillMatch = line.match(/^\s*#\s*@skill\s+(.+)\s*$/i);
+      if (skillMatch) skills.push(`@skill ${skillMatch[1].trim()}`);
+    }
+
+    const cleaned = lines
+      .filter((l) => !/^\s*#\s*Rule:\s*/i.test(l))
+      .filter((l) => !/^\s*#\s*Description:\s*/i.test(l))
+      .filter((l) => !/^\s*#\s*Constraints:\s*$/i.test(l))
+      .filter((l) => !/^\s*#\s*@constraint\s+/i.test(l))
+      .filter((l) => !/^\s*#\s*Skills:\s*$/i.test(l))
+      .filter((l) => !/^\s*#\s*@skill\s+/i.test(l))
+      .join("\n")
+      .trim();
+
+    const now = new Date();
+    return {
+      id: path.basename(filePath, path.extname(filePath)),
+      name: (nameMatch?.[1] || path.basename(filePath, path.extname(filePath))).trim(),
+      description: descMatch?.[1]?.trim(),
+      content: cleaned,
+      constraints,
+      skills,
+      metadata: {
+        createdAt: now,
+        updatedAt: now,
+        version: 1,
+      },
+    };
   }
 
   getAvailableTargets(): string[] {
