@@ -7,6 +7,16 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400;14..32,500;14..32,600;14..32,700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="../css/style.css">
     <style>
+        body {
+            background: radial-gradient(circle at 0% 0%, rgba(0,102,255,0.18) 0%, rgba(168,85,247,0.10) 40%, rgba(15,23,42,1) 100%);
+            color: var(--light);
+        }
+        .navbar {
+            background: rgba(15, 23, 42, 0.7);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+        }
+        .nav-links a { color: rgba(255,255,255,0.92); }
+        .nav-links a:hover { color: white; }
         .docs-container {
             display: flex;
             max-width: 1280px;
@@ -19,7 +29,14 @@
             position: sticky;
             top: 100px;
             height: fit-content;
+            background: rgba(255,255,255,0.92);
+            border: 1px solid rgba(255,255,255,0.25);
+            border-radius: 16px;
+            padding: 1rem 1.25rem;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.18);
         }
+        .docs-sidebar h4 { margin-top: 0.75rem; }
+        .docs-sidebar h4:first-child { margin-top: 0; }
         .docs-sidebar a {
             display: block;
             padding: 0.5rem 0;
@@ -31,7 +48,17 @@
         }
         .docs-content {
             flex: 1;
+            background: rgba(255,255,255,0.96);
+            border: 1px solid rgba(255,255,255,0.25);
+            border-radius: 18px;
+            padding: 1.5rem 1.75rem;
+            color: var(--dark);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.18);
+            line-height: 1.65;
         }
+        .docs-content h1 { margin-bottom: 0.75rem; }
+        .docs-content h2 { margin-top: 1.75rem; }
+        .docs-content p { color: rgba(15, 23, 42, 0.85); }
         .docs-content pre {
             background: var(--dark);
             color: white;
@@ -156,7 +183,9 @@ npm run start:ws</code></pre>
 
     <footer class="footer">
         <div class="footer-bottom">
-            <p>© 2026 Labs Synapse</p>
+            <p>
+                © 2026 Labs Synapse · <a href="../privacy.html">Privacy</a> · <a href="../terms.html">Terms</a> · <a href="../security.html">Security</a>
+            </p>
         </div>
     </footer>
 </body>

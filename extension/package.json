@@ -1,0 +1,199 @@
+{
+  "name": "synapse",
+  "displayName": "Synapse Rules",
+  "description": "One rulebase. Any IDE. Forever. Sync rules across Trae, Cursor, Windsurf, and more.",
+  "version": "0.1.0",
+  "publisher": "labs-synapse",
+  "icon": "icon.png",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/labs-synapse/synapse"
+  },
+  "homepage": "https://labs-synapse.com",
+  "bugs": {
+    "url": "https://github.com/labs-synapse/synapse/issues"
+  },
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.75.0"
+  },
+  "categories": ["AI", "Programming Languages", "Formatters", "Testing"],
+  "keywords": [
+    "synapse",
+    "ai-rules",
+    "cursor",
+    "trae",
+    "windsurf",
+    "cline",
+    "token-optimization",
+    "rule-sync"
+  ],
+  "badges": [
+    {
+      "url": "https://img.shields.io/github/stars/labs-synapse/synapse",
+      "href": "https://github.com/labs-synapse/synapse",
+      "description": "GitHub Stars"
+    }
+  ],
+  "markdown": "github",
+  "galleryBanner": {
+    "color": "#667eea",
+    "theme": "dark"
+  },
+  "activationEvents": [
+    "onView:synapseActionsView",
+    "onView:synapseCostDashboard",
+    "onView:synapseSynergyView",
+    "onView:synapseConflictDetectionView",
+    "onView:synapseTokenAnalysisView",
+    "onCommand:synapse.sync",
+    "onCommand:synapse.init",
+    "onCommand:synapse.analyze",
+    "onCommand:synapse.analyzeTokens",
+    "onCommand:synapse.detect",
+    "onCommand:synapse.convertToSkill",
+    "onCommand:synapse.upgradePro",
+    "onCommand:synapse.target.add",
+    "onCommand:synapse.ws.connect",
+    "onCommand:synapse.ws.disconnect"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "synapse.init",
+        "title": "Synapse: Initialize Project",
+        "category": "Synapse"
+      },
+      {
+        "command": "synapse.sync",
+        "title": "Synapse: Sync Rules",
+        "category": "Synapse"
+      },
+      {
+        "command": "synapse.target.add",
+        "title": "Synapse: Add Target IDE",
+        "category": "Synapse"
+      },
+      {
+        "command": "synapse.analyze",
+        "title": "Synapse: Analyze Tokens",
+        "category": "Synapse"
+      },
+      {
+        "command": "synapse.analyzeTokens",
+        "title": "Synapse: Analyze Tokens (Detailed)",
+        "category": "Synapse"
+      },
+      {
+        "command": "synapse.detect",
+        "title": "Synapse: Detect Conflicts",
+        "category": "Synapse"
+      },
+      {
+        "command": "synapse.convertToSkill",
+        "title": "Synapse: Convert Large Rules to Skills",
+        "category": "Synapse"
+      },
+      {
+        "command": "synapse.upgradePro",
+        "title": "Synapse: Upgrade to Pro",
+        "category": "Synapse"
+      },
+      {
+        "command": "synapse.ws.connect",
+        "title": "Synapse: Connect WS Sync",
+        "category": "Synapse"
+      },
+      {
+        "command": "synapse.ws.disconnect",
+        "title": "Synapse: Disconnect WS Sync",
+        "category": "Synapse"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "synapse-sidebar",
+          "title": "Synapse",
+          "icon": "media/synapse-icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "synapse-sidebar": [
+        {
+          "id": "synapseActionsView",
+          "name": "Actions"
+        },
+        {
+          "id": "synapseCostDashboard",
+          "name": "Cost Dashboard"
+        },
+        {
+          "id": "synapseSynergyView",
+          "name": "Synergy"
+        },
+        {
+          "id": "synapseConflictDetectionView",
+          "name": "Conflicts"
+        },
+        {
+          "id": "synapseTokenAnalysisView",
+          "name": "Token Analysis"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Synapse",
+      "properties": {
+        "synapse.masterPath": {
+          "type": "string",
+          "default": ".synapse/",
+          "description": "Path to master rule folder"
+        },
+        "synapse.targets": {
+          "type": "object",
+          "default": {
+            "trae": { "enabled": true },
+            "cursor": { "enabled": true }
+          },
+          "description": "Target IDE outputs to generate (enable/disable per IDE)."
+        },
+        "synapse.wsPort": {
+          "type": "number",
+          "default": 3457,
+          "description": "Port for Synapse WebSocket sync server."
+        },
+        "synapse.wsAutoConnect": {
+          "type": "boolean",
+          "default": false,
+          "description": "Auto-connect VS Code to Synapse WebSocket sync server on workspace open."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "package": "vsce package --out synapse.vsix",
+    "build:vsix": "vsce package --out synapse.vsix",
+    "build:all": "npm run compile && npm run build:vsix && cd .. && npm run build"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.75.0",
+    "@types/express": "^4.17.0",
+    "@types/ws": "^8.5.0",
+    "@types/fs-extra": "^11.0.0",
+    "typescript": "^5.0.0",
+    "@vscode/vsce": "^2.22.0"
+  },
+  "dependencies": {
+    "express": "^4.18.0",
+    "ws": "^8.14.0",
+    "fs-extra": "^11.0.0",
+    "tiktoken": "^1.0.22"
+  }
+}
+
