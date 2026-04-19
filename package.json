@@ -27,6 +27,11 @@
     "build": "npm --prefix ./standalone run build",
     "postinstall": "npm run build",
     "prepublishOnly": "npm run build",
+    "build:binary": "pkg . --targets node18-win-x64,node18-win-arm64,node18-macos-x64,node18-macos-arm64,node18-linux-x64,node18-linux-arm64 --out-path dist",
+    "build:binary:win": "pkg . --targets node18-win-x64 --out-path dist",
+    "build:binary:mac": "pkg . --targets node18-macos-x64,node18-macos-arm64 --out-path dist",
+    "build:binary:linux": "pkg . --targets node18-linux-x64,node18-linux-arm64 --out-path dist",
+    "build:all": "npm run build:binary",
     "dashboard": "node ./src/server.js",
     "website:dev": "cd website && python -m http.server 3000",
     "website:build": "node -e \"require('fs-extra').removeSync('dist/website'); require('fs-extra').copySync('website','dist/website',{overwrite:true});\""
@@ -43,6 +48,18 @@
   },
   "devDependencies": {
     "@types/fs-extra": "^11.0.0",
-    "@types/node": "^20.0.0"
+    "@types/node": "^20.0.0",
+    "pkg": "^5.8.1"
+  },
+  "pkg": {
+    "scripts": [
+      "bin/synapse-unified.js",
+      "src/**/*.js"
+    ],
+    "assets": [
+      "public/**/*",
+      "Template/**/*"
+    ],
+    "outputPath": "dist"
   }
 }

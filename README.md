@@ -106,6 +106,18 @@ node .\bin\synapse-unified.js init
 node .\bin\synapse-unified.js sync --all
 ```
 
+### CLI (Native Binaries)
+
+- Build locally (requires Node.js + pkg):
+
+```powershell
+npm install
+npm run build:binary:win
+```
+
+- Outputs go to `dist/` (platform-specific names).
+- Note: the standalone binary supports the core CLI workflows (init/sync/watch/status/target). Server commands (`serve`, `dashboard`) require the Node.js (npm) version.
+
 ### VS Code Extension (Build / Run / Package)
 
 - Build:

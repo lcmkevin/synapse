@@ -1,0 +1,40 @@
+name: Build Native Binaries
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "18"
+
+      - run: npm install
+
+      - name: Build binaries (Windows)
+        if: runner.os == 'Windows'
+        run: npm run build:binary:win
+
+      - name: Build binaries (macOS)
+        if: runner.os == 'macOS'
+        run: npm run build:binary:mac
+
+      - name: Build binaries (Linux)
+        if: runner.os == 'Linux'
+        run: npm run build:binary:linux
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: synapse-${{ runner.os }}
+          path: dist/
