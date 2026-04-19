@@ -3,6 +3,7 @@ node_modules/
 package-lock.json
 **/.vscode-test/
 .vercel/
+extension/extension/
 
 # Build outputs
 dist/
