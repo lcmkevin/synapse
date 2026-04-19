@@ -34,8 +34,9 @@
             border-radius: 16px;
             padding: 1rem 1.25rem;
             box-shadow: 0 10px 30px rgba(0,0,0,0.18);
+            color: var(--dark);
         }
-        .docs-sidebar h4 { margin-top: 0.75rem; }
+        .docs-sidebar h4 { margin-top: 0.75rem; color: var(--dark); }
         .docs-sidebar h4:first-child { margin-top: 0; }
         .docs-sidebar a {
             display: block;
@@ -59,6 +60,8 @@
         .docs-content h1 { margin-bottom: 0.75rem; }
         .docs-content h2 { margin-top: 1.75rem; }
         .docs-content p { color: rgba(15, 23, 42, 0.85); }
+        .docs-content a { color: var(--primary); }
+        .docs-content a:hover { color: var(--primary-dark); }
         .docs-content pre {
             background: var(--dark);
             color: white;
@@ -81,6 +84,8 @@
                 position: static;
             }
         }
+        .footer-bottom a { color: rgba(255,255,255,0.85); text-decoration: none; }
+        .footer-bottom a:hover { color: white; }
     </style>
 </head>
 <body>
