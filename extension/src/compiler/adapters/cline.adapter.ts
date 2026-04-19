@@ -1,13 +1,13 @@
 import * as path from "path";
 import { IDEAdapter, SynapseRule } from "./adapter.interface";
 
-export class TraeAdapter implements IDEAdapter {
-  id = "trae-v1";
-  name = "Trae";
+export class ClineAdapter implements IDEAdapter {
+  id = "cline-v1";
+  name = "Cline";
   version = "1.0.0";
   sourceExtension = ".synapse";
   targetExtension = ".md";
-  targetFolder = ".trae/rules/";
+  targetFolder = ".clinerules/";
 
   async compile(rule: SynapseRule, options: { minify?: boolean } = {}): Promise<string> {
     const lines: string[] = [];
@@ -54,15 +54,14 @@ export class TraeAdapter implements IDEAdapter {
     const nameMatch = content.match(/^#\s+(.+)$/m);
     if (nameMatch) name = nameMatch[1].trim();
 
-    const constraints: string[] = [];
-    const skills: string[] = [];
     let description = "";
     let mainContent = "";
+    const constraints: string[] = [];
+    const skills: string[] = [];
 
     let inConstraints = false;
     let inSkills = false;
-    let beforeBody = true;
-    let descriptionLines: string[] = [];
+    let inDescription = true;
 
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
@@ -72,56 +71,42 @@ export class TraeAdapter implements IDEAdapter {
       if (line.trim() === "## Constraints") {
         inConstraints = true;
         inSkills = false;
-        beforeBody = false;
+        inDescription = false;
         continue;
       }
 
       if (line.trim() === "## Skills") {
         inConstraints = false;
         inSkills = true;
-        beforeBody = false;
+        inDescription = false;
         continue;
       }
 
-      if (inConstraints) {
-        if (line.trim().startsWith("-")) {
-          const constraint = line.trim().slice(1).trim();
-          if (constraint) constraints.push(`@constraint ${constraint}`);
-          continue;
-        }
-        if (line.trim() !== "") inConstraints = false;
-        if (inConstraints) continue;
+      if (inConstraints && line.trim().startsWith("-")) {
+        const constraint = line.trim().substring(1).trim();
+        if (constraint) constraints.push(`@constraint ${constraint}`);
+        continue;
       }
 
-      if (inSkills) {
-        if (line.trim().startsWith("-")) {
-          const skill = line.trim().slice(1).trim();
-          if (skill) skills.push(`@skill ${skill}`);
-          continue;
-        }
-        if (line.trim() !== "") inSkills = false;
-        if (inSkills) continue;
+      if (inSkills && line.trim().startsWith("-")) {
+        const skill = line.trim().substring(1).trim();
+        if (skill) skills.push(`@skill ${skill}`);
+        continue;
       }
 
-      if (beforeBody) {
-        if (line.trim() === "") {
-          if (descriptionLines.length > 0) {
-            description = descriptionLines.join(" ").trim();
-            beforeBody = false;
-          }
-          continue;
-        }
+      if (inConstraints && line.trim() !== "" && !line.trim().startsWith("-")) inConstraints = false;
+      if (inSkills && line.trim() !== "" && !line.trim().startsWith("-")) inSkills = false;
 
-        if (!line.startsWith("#")) {
-          descriptionLines.push(line.trim());
-          continue;
-        }
+      if (inDescription && line.trim() && !line.startsWith("#")) {
+        description = line.trim();
+        inDescription = false;
+        continue;
       }
 
-      if (line.trim() || mainContent) mainContent += `${line}\n`;
+      if (!inConstraints && !inSkills && !line.startsWith("##")) {
+        if (line.trim() || mainContent) mainContent += `${line}\n`;
+      }
     }
-
-    if (!description && descriptionLines.length > 0) description = descriptionLines.join(" ").trim();
 
     const now = new Date();
     return {
@@ -142,30 +127,12 @@ export class TraeAdapter implements IDEAdapter {
   async validate(compiled: string): Promise<{ valid: boolean; errors?: string[] }> {
     const errors: string[] = [];
     if (!compiled.trim()) errors.push("Empty rule content");
-    if (!/^#\s+/m.test(compiled)) errors.push("Missing title (H1 heading)");
+    if (!/^#\s+/m.test(compiled)) errors.push("Missing rule title (H1 heading)");
     return { valid: errors.length === 0, errors };
   }
 
   getInstallInstructions(): string {
-    return "Trae automatically reads .md files from .trae/rules/ folder. No additional setup required.";
-  }
-
-  getTemplate(): string {
-    return `# Example Rule
-
-This rule enforces TypeScript usage and proper formatting.
-
-Always use TypeScript for new files.
-Use 2 spaces for indentation.
-Never use console.log in production.
-
-## Constraints
-- file:*.ts
-- file:*.tsx
-- exclude:**/*.test.ts
-
-## Skills
-- code-review
-- refactor-suggestions`;
+    return "Cline reads .md files from .clinerules/ folder.";
   }
 }
+
