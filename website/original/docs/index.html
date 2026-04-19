@@ -73,11 +73,40 @@ synapse watch</code>
         <div class="two-col">
           <div class="panel">
             <h3>Trae output</h3>
-            <code>.trae/*.trae</code>
+            <code>.trae/rules/*.md</code>
           </div>
           <div class="panel">
             <h3>Cursor output</h3>
             <code>.cursor/rules/*.mdc</code>
+          </div>
+        </div>
+        <div class="two-col" style="margin-top:14px">
+          <div class="panel">
+            <h3>Windsurf output</h3>
+            <code>.windsurf/*.windsurfrules</code>
+          </div>
+          <div class="panel">
+            <h3>Cline output</h3>
+            <code>.clinerules/*.md</code>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="binaries" class="section">
+      <div class="container">
+        <h2>Native binaries</h2>
+        <p class="muted">Build standalone executables with pkg (users don’t need Node.js installed).</p>
+        <div class="two-col">
+          <div class="panel">
+            <h3>Build (Windows)</h3>
+            <code>npm install
+npm run build:binary:win</code>
+          </div>
+          <div class="panel">
+            <h3>Release builds</h3>
+            <code>Push a tag like v0.1.0
+GitHub Actions builds artifacts</code>
           </div>
         </div>
       </div>
@@ -135,7 +164,7 @@ Claude:   standalone/claude_desktop_config.json</code>
     <footer class="footer">
       <div class="container">
         <div style="display:flex;flex-wrap:wrap;gap:14px;align-items:center;justify-content:space-between">
-          <div>© Synapse</div>
+          <div>© 2026 Labs Synapse</div>
           <div style="display:flex;gap:12px">
             <a href="../index.html">Home</a>
             <a href="../pricing.html">Pricing</a>
@@ -147,4 +176,3 @@ Claude:   standalone/claude_desktop_config.json</code>
     <script src="../js/main.js"></script>
   </body>
 </html>
-

@@ -42,7 +42,7 @@
             </div>
             <h1 class="title">One rule system for every IDE.</h1>
             <p class="subtitle">
-              Write rules once in <code>.synapse/</code>, then compile to Trae, Cursor, and future targets.
+              Write rules once in <code>.synapse/</code>, then compile to Trae, Cursor, Windsurf, and Cline.
               Get token/cost insights, convert large rules to lazy-loaded skills, and share via MCP and WebSocket.
             </p>
             <div class="hero-actions">
@@ -53,8 +53,10 @@
           <div class="card">
             <h3>Example pipeline</h3>
             <code>.synapse/rules/*.synapse
-  ├─ compile → .trae/*.trae
+  ├─ compile → .trae/rules/*.md
   ├─ compile → .cursor/rules/*.mdc
+  ├─ compile → .windsurf/*.windsurfrules
+  ├─ compile → .clinerules/*.md
   └─ serve → MCP + WebSocket</code>
           </div>
         </div>
@@ -69,7 +71,7 @@
           <div class="feature">
             <div class="pill">Adapters</div>
             <h3>Multi-IDE compilation</h3>
-            <p>Compile master rules into IDE formats (Trae, Cursor) and extend to more adapters later.</p>
+            <p>Compile master rules into IDE formats (Trae, Cursor, Windsurf, Cline) and extend to more adapters later.</p>
           </div>
           <div class="feature">
             <div class="pill">Cost</div>
@@ -127,7 +129,7 @@ npm run start:ws</code>
     <footer class="footer">
       <div class="container">
         <div style="display:flex;flex-wrap:wrap;gap:14px;align-items:center;justify-content:space-between">
-          <div>© Synapse</div>
+          <div>© 2026 Labs Synapse</div>
           <div style="display:flex;gap:12px">
             <a href="./pricing.html">Pricing</a>
             <a href="./docs/index.html">Docs</a>
@@ -139,4 +141,3 @@ npm run start:ws</code>
     <script src="./js/main.js"></script>
   </body>
 </html>
-
