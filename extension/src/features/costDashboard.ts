@@ -2,15 +2,12 @@ import * as vscode from "vscode";
 import * as fs from "fs/promises";
 import * as path from "path";
 import { TokenCounter } from "./tokenAnalysis/tokenCounter";
-import { LicenseManager } from "../license";
 
 export class CostDashboardProvider implements vscode.WebviewViewProvider {
   private tokenCounter: TokenCounter;
-  private license: LicenseManager;
 
   constructor(private context: vscode.ExtensionContext) {
     this.tokenCounter = new TokenCounter();
-    this.license = LicenseManager.getInstance();
   }
 
   resolveWebviewView(webviewView: vscode.WebviewView) {
@@ -21,7 +18,7 @@ export class CostDashboardProvider implements vscode.WebviewViewProvider {
       if (msg.command === "loadData") {
         await this.sendDashboardData(webviewView);
       } else if (msg.command === "upgrade") {
-        await this.license.showUpgradePrompt();
+        await vscode.commands.executeCommand("synapse.upgradePro");
       }
     });
 
@@ -43,7 +40,15 @@ export class CostDashboardProvider implements vscode.WebviewViewProvider {
       );
 
       const analysis = this.tokenCounter.analyzeRules(rules, "gpt-4o");
-      const isPro = this.license.isProUser();
+      const ext =
+        vscode.extensions.getExtension("labs-synapse.synapse") || vscode.extensions.getExtension("lcmkevin.synapse");
+      const exported = ext && ext.isActive ? ext.exports : undefined;
+      const isPro =
+        typeof exported?.isProUser === "function"
+          ? !!exported.isProUser()
+          : typeof exported?.isProUser === "boolean"
+            ? exported.isProUser
+            : false;
 
       await webviewView.webview.postMessage({
         command: "update",
@@ -93,9 +98,10 @@ export class CostDashboardProvider implements vscode.WebviewViewProvider {
                 
                 function render(data) {
                     const topRules = [...data.breakdown].sort((a,b) => b.tokens - a.tokens).slice(0,3);
+                    const recommendations = Array.isArray(data.recommendations) ? data.recommendations : [];
                     const html = \`
                         <div class="metric">
-                            <div>Total Tokens \${isPro ? '' : '<span class="pro-badge">FREE</span>'}</div>
+                            <div>Total Tokens \${isPro ? '<span class="pro-badge">PRO</span>' : '<span class="pro-badge">FREE</span>'}</div>
                             <div class="metric-value">\${data.totalTokens.toLocaleString()}</div>
                             <div>≈ $\${data.totalCost.toFixed(4)}/session</div>
                         </div>
@@ -112,8 +118,8 @@ export class CostDashboardProvider implements vscode.WebviewViewProvider {
                             </div>
                         \`).join('')}
                         <h3>Recommendations</h3>
-                        \${data.recommendations.map(r => '<div style="background:#fff3cd;padding:8px;margin:4px 0;border-radius:6px;">💡 ' + r + '</div>').join('')}
-                        \${!isPro ? '<button class="upgrade" onclick="upgrade()">✨ Upgrade to Pro - $9/mo ✨</button>' : '<button onclick="refresh()">🔄 Refresh</button>'}
+                        \${recommendations.length ? recommendations.map(r => '<div style="background:#fff3cd;padding:8px;margin:4px 0;border-radius:6px;">💡 ' + r + '</div>').join('') : '<div style="opacity:0.8">No recommendations.</div>'}
+                        \${!isPro ? '<button class="upgrade" onclick="upgrade()">✨ Upgrade to Pro - $9/mo ✨</button>' : '<button onclick="refresh()">✅ Pro active · Refresh</button>'}
                     \`;
                     document.getElementById('content').innerHTML = html;
                 }

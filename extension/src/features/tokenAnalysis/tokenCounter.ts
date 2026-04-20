@@ -138,7 +138,8 @@ export class TokenCounter {
       );
     }
 
-    const ext = vscode.extensions.getExtension("lcmkevin.synapse");
+    const ext =
+      vscode.extensions.getExtension("labs-synapse.synapse") || vscode.extensions.getExtension("lcmkevin.synapse");
     const exported = ext && ext.isActive ? ext.exports : undefined;
     const isPro =
       typeof exported?.isProUser === "function"
@@ -158,6 +159,10 @@ export class TokenCounter {
           1
         )}% of your token budget. Review this rule first.`
       );
+    }
+
+    if (recommendations.length === 0) {
+      recommendations.push("✅ No recommendations right now — your rules look lean.");
     }
 
     return recommendations;

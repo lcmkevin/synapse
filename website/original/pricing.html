@@ -74,6 +74,9 @@ Pro: team sharing + history (optional)</code>
               <li>Team sharing (mock in current build)</li>
               <li>Priority roadmap items</li>
             </ul>
+            <div style="margin-top:10px">
+              <button class="btn btn-primary" id="proCheckoutBtn">Checkout →</button>
+            </div>
           </div>
           <div class="price-card">
             <div class="pill">Enterprise</div>
@@ -118,5 +121,25 @@ Pro: team sharing + history (optional)</code>
     </footer>
 
     <script src="./js/main.js"></script>
+    <script>
+      async function startProCheckout() {
+        const email = prompt("Email for checkout (optional):") || "";
+        try {
+          const resp = await fetch("/api/create-checkout", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ customerEmail: email }),
+          });
+          const data = await resp.json();
+          if (data && data.url) {
+            window.location.href = data.url;
+            return;
+          }
+        } catch {}
+        window.location.href = "./docs/index.html#upgrade";
+      }
+      const btn = document.getElementById("proCheckoutBtn");
+      if (btn) btn.addEventListener("click", () => void startProCheckout());
+    </script>
   </body>
 </html>

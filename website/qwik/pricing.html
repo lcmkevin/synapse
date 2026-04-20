@@ -43,7 +43,7 @@
             <li>✅ Convert large rules to skills</li>
             <li>✅ Pro license gate</li>
           </ul>
-          <a class="btn btn-primary" href="./docs/index.html#pro">Checkout → Get Pro key</a>
+          <button class="btn btn-primary" id="proCheckoutBtn">Checkout → Get Pro key</button>
         </div>
         <div class="pricing-card">
           <h3>Enterprise</h3>
@@ -72,6 +72,26 @@
       <div class="footer-bottom">© 2026 Labs Synapse</div>
     </footer>
 
+    <script>
+      async function startProCheckout() {
+        const email = prompt("Email for checkout (optional):") || "";
+        try {
+          const resp = await fetch("/api/create-checkout", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ customerEmail: email }),
+          });
+          const data = await resp.json();
+          if (data && data.url) {
+            window.location.href = data.url;
+            return;
+          }
+        } catch {}
+        window.location.href = "./docs/index.html#pro";
+      }
+      const btn = document.getElementById("proCheckoutBtn");
+      if (btn) btn.addEventListener("click", () => void startProCheckout());
+    </script>
     <script src="./js/main.js"></script>
   </body>
 </html>
