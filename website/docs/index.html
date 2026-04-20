@@ -124,8 +124,17 @@ Synapse: Convert Large Rules to Skills</code>
           </div>
           <div class="panel" id="upgrade">
             <h3>Pro features</h3>
-            <code>Synapse: Upgrade to Pro</code>
+            <code>Synapse: Upgrade to Pro
+Synapse: Enter License Key</code>
           </div>
+        </div>
+        <div class="panel" style="margin-top:14px">
+          <h3>Billing + licensing (developers)</h3>
+          <code>VS Code "Upgrade to Pro"
+POST /api/create-checkout  → Stripe Checkout URL
+Stripe success → POST /api/webhooks/stripe
+Webhook upserts license row in Supabase
+User enters key → POST /api/validate → unlock</code>
         </div>
       </div>
     </section>

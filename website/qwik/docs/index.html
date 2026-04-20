@@ -184,11 +184,21 @@ npm run build:binary:win
             <pre><code>- Unlimited targets
 - Convert large rules to lazy-loaded skills
 - Additional Pro-only capabilities</code></pre>
-            <p>To get a Pro key, complete checkout on the Pricing page. After successful payment, Synapse issues a license key and stores it server-side.</p>
+            <p>To get a Pro key, complete checkout. After successful payment, Synapse issues a license key and stores it server-side.</p>
             <p>To activate Pro in the IDE:</p>
             <pre><code>Command Palette → Synapse: Upgrade to Pro
 Enter License Key</code></pre>
             <p>Pro keys are validated by the server (HMAC signature + database status). Revoked or expired keys stop working.</p>
+
+            <h3 id="pro-dev">Pro (Developer)</h3>
+            <pre><code>VS Code "Upgrade to Pro"
+→ POST /api/create-checkout (returns Stripe Checkout URL)
+→ Stripe Checkout success
+→ POST /api/webhooks/stripe (verified by STRIPE_WEBHOOK_SECRET)
+→ generate license key → upsert licenses row in Supabase
+→ user enters key (Synapse: Enter License Key)
+→ POST /api/validate (HMAC + DB check) → unlock</code></pre>
+            <p>Key delivery (email / portal) is a separate step and can be implemented with your email provider after webhook writes the license row.</p>
 
             <h2 id="servers">MCP + WebSocket</h2>
             <p>Run standalone servers to integrate with external tools:</p>
@@ -198,8 +208,8 @@ npm run build
 npm start       # MCP server
 npm run start:ws</code></pre>
 
-            <h2 id="team">Team</h2>
-            <p>Team workflows are planned, including shared rulebases and audit logs.</p>
+            <h2 id="team">Enterprise</h2>
+            <p>Enterprise is planned and will be rolled out soon.</p>
         </div>
     </div>
 
