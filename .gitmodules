@@ -1,3 +1,3 @@
 [submodule "packages/pro"]
 	path = packages/pro
-	url = https://github.com/labs-synapse/synapse-pro.git
+	url = https://github.com/lcmkevin/synapse-pro.git
