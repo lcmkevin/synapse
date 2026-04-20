@@ -26,15 +26,22 @@ export class LicenseManager {
   async showUpgradePrompt(): Promise<void> {
     const choice = await vscode.window.showInformationMessage(
       "This feature requires Synapse Pro.",
+      "Enter License Key",
       "Learn More"
     );
-    if (choice === "Learn More") {
+    if (choice === "Enter License Key") {
+      const key = await vscode.window.showInputBox({ prompt: "Enter your Synapse Pro license key" });
+      if (key) await this.activateLicense(key);
+    } else if (choice === "Learn More") {
       await vscode.env.openExternal(vscode.Uri.parse("https://www.labs-synapse.com/pricing"));
     }
   }
 
-  async activateLicense(_key: string): Promise<boolean> {
-    void vscode.window.showInformationMessage("Please activate Synapse Pro from the Pro module.");
+  async activateLicense(key: string): Promise<boolean> {
+    if (this.context) {
+      await this.context.globalState.update("licenseKey", key);
+    }
+    void vscode.window.showInformationMessage("License key saved. Install/enable Synapse Pro module to validate.");
     return false;
   }
 }

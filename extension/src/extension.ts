@@ -428,6 +428,20 @@ Use meaningful variable names
     skillConverter = new SkillConverter(context);
   });
 
+  const enterLicenseKeyCommand = vscode.commands.registerCommand("synapse.enterLicenseKey", async () => {
+    const key = await vscode.window.showInputBox({ prompt: "Enter your Synapse Pro license key" });
+    if (!key) return;
+
+    if (typeof license.activateLicense === "function") {
+      const ok = await license.activateLicense(key);
+      if (ok) skillConverter = new SkillConverter(context);
+      return;
+    }
+
+    await context.globalState.update("licenseKey", key);
+    vscode.window.showInformationMessage("License key saved. Restart with Pro module to validate.");
+  });
+
   const detectCommand = vscode.commands.registerCommand("synapse.detect", async () => { // NEW:
     vscode.window.showInformationMessage("Synapse: Detect Conflicts (coming soon)");
   });
@@ -470,6 +484,7 @@ Use meaningful variable names
     analyzeCommand, // NEW:
     convertToSkillCommand,
     upgradeProCommand,
+    enterLicenseKeyCommand,
     detectCommand, // NEW:
     wsConnectCommand,
     wsDisconnectCommand,
