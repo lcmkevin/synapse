@@ -184,9 +184,11 @@ npm run build:binary:win
             <pre><code>- Unlimited targets
 - Convert large rules to lazy-loaded skills
 - Additional Pro-only capabilities</code></pre>
-            <p>To activate Pro, use:</p>
+            <p>To get a Pro key, complete checkout on the Pricing page. After successful payment, Synapse issues a license key and stores it server-side.</p>
+            <p>To activate Pro in the IDE:</p>
             <pre><code>Command Palette → Synapse: Upgrade to Pro
 Enter License Key</code></pre>
+            <p>Pro keys are validated by the server (HMAC signature + database status). Revoked or expired keys stop working.</p>
 
             <h2 id="servers">MCP + WebSocket</h2>
             <p>Run standalone servers to integrate with external tools:</p>
