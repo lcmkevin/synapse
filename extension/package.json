@@ -135,23 +135,28 @@
       "synapse-sidebar": [
         {
           "id": "synapseActionsView",
-          "name": "Actions"
+          "name": "Actions",
+          "type": "webview"
         },
         {
           "id": "synapseCostDashboard",
-          "name": "Cost Dashboard"
+          "name": "Cost Dashboard",
+          "type": "webview"
         },
         {
           "id": "synapseSynergyView",
-          "name": "Synergy"
+          "name": "Synergy",
+          "type": "webview"
         },
         {
           "id": "synapseConflictDetectionView",
-          "name": "Conflicts"
+          "name": "Conflicts",
+          "type": "webview"
         },
         {
           "id": "synapseTokenAnalysisView",
-          "name": "Token Analysis"
+          "name": "Token Analysis",
+          "type": "webview"
         }
       ]
     },
