@@ -68,8 +68,26 @@ export class TokenCounter {
 
       return { model, tokenCount, estimatedCostUSD, characterCount, lineCount };
     } catch {
-      return { model, tokenCount: 0, estimatedCostUSD: 0, characterCount, lineCount };
+      const tokenCount = this.approximateTokenCount(text);
+      const estimatedCostUSD = (tokenCount / 1_000_000) * MODEL_RATES[model];
+      return { model, tokenCount, estimatedCostUSD, characterCount, lineCount };
     }
+  }
+
+  private approximateTokenCount(text: string): number {
+    if (!text) return 0;
+
+    let asciiCount = 0;
+    let nonAsciiCount = 0;
+    for (let i = 0; i < text.length; i++) {
+      const code = text.charCodeAt(i);
+      if (code <= 0x7f) asciiCount++;
+      else nonAsciiCount++;
+    }
+
+    const approx = asciiCount / 4 + nonAsciiCount;
+    const rounded = Math.ceil(approx);
+    return Number.isFinite(rounded) && rounded > 0 ? rounded : 0;
   }
 
   analyzeRules(
