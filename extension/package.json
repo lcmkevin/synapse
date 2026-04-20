@@ -189,6 +189,11 @@
           "type": "boolean",
           "default": false,
           "description": "Auto-connect VS Code to Synapse WebSocket sync server on workspace open."
+        },
+        "synapse.licenseApiUrl": {
+          "type": "string",
+          "default": "https://www.labs-synapse.com",
+          "description": "Base URL for license validation API (expects /api/validate)."
         }
       }
     }
