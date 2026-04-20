@@ -63,7 +63,8 @@ export class TokenCounter {
     try {
       const encoder = this.getEncoder(model);
       const tokens = encoder.encode(text);
-      const tokenCount = Array.isArray(tokens) ? tokens.length : 0;
+      const tokenCount =
+        tokens && typeof tokens.length === "number" ? tokens.length : Array.isArray(tokens) ? tokens.length : 0;
       const estimatedCostUSD = (tokenCount / 1_000_000) * MODEL_RATES[model];
 
       return { model, tokenCount, estimatedCostUSD, characterCount, lineCount };
