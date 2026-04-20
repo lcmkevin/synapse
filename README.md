@@ -18,6 +18,20 @@ Synapse uses a project-local master folder:
   - Cline: `.clinerules/*.md`
 - Use the dashboard for deploy/status/sync/preview workflows.
 
+## Pro Code (Optional Submodule)
+
+- Public repo can run without Pro code.
+- Pro code lives in a private repo mounted as a submodule at `packages/pro` (see [.gitmodules](file:///c:/MyProgram/Trae/.gitmodules)).
+- Clone patterns:
+
+```bash
+# Free (no private access)
+git clone https://github.com/labs-synapse/synapse.git
+
+# Pro collaborators (private access)
+git clone --recursive https://github.com/labs-synapse/synapse.git
+```
+
 ## Quick Start (CLI)
 
 From this repo folder:

@@ -38,5 +38,4 @@ npm-debug.log*
 .windsurf/
 .cline/
 
-# Pro features (private)
-packages/pro/
+!packages/pro/

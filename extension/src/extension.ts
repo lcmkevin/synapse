@@ -9,7 +9,6 @@ import WebSocket from "ws";
 import { AIModel, TokenCounter } from "./features/tokenAnalysis/tokenCounter";
 import { SkillConverter } from "./features/tokenAnalysis/skillConverter";
 import { CostDashboardProvider } from "./features/costDashboard";
-import { LicenseManager } from "./license";
 import { ImportScanner } from "./features/importScanner";
 import { FormatConverter } from "./features/formatConverter";
 
@@ -21,11 +20,37 @@ class PlaceholderViewProvider implements vscode.WebviewViewProvider {
   }
 }
 
+type LicenseManagerLike = {
+  initialize(context: vscode.ExtensionContext): void;
+  isProUser(): boolean;
+  canUseFeature(feature: any): boolean;
+  showUpgradePrompt(): Promise<void>;
+  activateLicense?(key: string): Promise<boolean>;
+};
+
+async function loadLicenseManager(context: vscode.ExtensionContext): Promise<LicenseManagerLike> {
+  const proPath = path.join(context.extensionPath, "..", "packages", "pro", "extension", "license");
+  try {
+    const proModule: any = require(proPath);
+    if (proModule?.LicenseManager?.getInstance) {
+      const inst: LicenseManagerLike = proModule.LicenseManager.getInstance();
+      inst.initialize(context);
+      return inst;
+    }
+  } catch {
+    void 0;
+  }
+
+  const fallbackModule: any = require("./license");
+  const inst: LicenseManagerLike = fallbackModule.LicenseManager.getInstance();
+  inst.initialize(context);
+  return inst;
+}
+
 export async function activate(context: vscode.ExtensionContext) {
   console.log("Synapse extension activated"); // NEW:
 
-  const license = LicenseManager.getInstance();
-  license.initialize(context);
+  const license = await loadLicenseManager(context);
 
   const adapterManager = new AdapterManager(context); // NEW:
   tokenCounter = new TokenCounter();

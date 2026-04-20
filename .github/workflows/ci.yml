@@ -11,6 +11,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Init pro submodule (optional)
+        env:
+          PRIVATE_REPO_TOKEN: ${{ secrets.PRIVATE_REPO_TOKEN }}
+        run: |
+          if [ -n "${PRIVATE_REPO_TOKEN}" ]; then
+            git config --global url."https://${PRIVATE_REPO_TOKEN}@github.com/".insteadOf "https://github.com/"
+            git submodule update --init --recursive
+          else
+            echo "No PRIVATE_REPO_TOKEN; skipping submodules"
+          fi
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
@@ -24,6 +34,16 @@ jobs:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:
       - uses: actions/checkout@v4
+      - name: Init pro submodule (optional)
+        env:
+          PRIVATE_REPO_TOKEN: ${{ secrets.PRIVATE_REPO_TOKEN }}
+        run: |
+          if [ -n "${PRIVATE_REPO_TOKEN}" ]; then
+            git config --global url."https://${PRIVATE_REPO_TOKEN}@github.com/".insteadOf "https://github.com/"
+            git submodule update --init --recursive
+          else
+            echo "No PRIVATE_REPO_TOKEN; skipping submodules"
+          fi
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
