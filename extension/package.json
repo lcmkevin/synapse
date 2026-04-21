@@ -59,6 +59,7 @@
     "onCommand:synapse.convertToSkill",
     "onCommand:synapse.upgradePro",
     "onCommand:synapse.enterLicenseKey",
+    "onCommand:synapse.licenseDiagnostics",
     "onCommand:synapse.target.add",
     "onCommand:synapse.ws.connect",
     "onCommand:synapse.ws.disconnect",
@@ -110,6 +111,11 @@
       {
         "command": "synapse.enterLicenseKey",
         "title": "Synapse: Enter License Key",
+        "category": "Synapse"
+      },
+      {
+        "command": "synapse.licenseDiagnostics",
+        "title": "Synapse: License Diagnostics",
         "category": "Synapse"
       },
       {

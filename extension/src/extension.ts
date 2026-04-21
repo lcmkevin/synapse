@@ -26,6 +26,7 @@ type LicenseManagerLike = {
   canUseFeature(feature: any): boolean;
   showUpgradePrompt(): Promise<void>;
   activateLicense?(key: string): Promise<boolean>;
+  runDiagnostics?(): Promise<void>;
 };
 
 async function loadLicenseManager(context: vscode.ExtensionContext): Promise<LicenseManagerLike> {
@@ -442,6 +443,14 @@ Use meaningful variable names
     vscode.window.showInformationMessage("License key saved. Restart with Pro module to validate.");
   });
 
+  const licenseDiagnosticsCommand = vscode.commands.registerCommand("synapse.licenseDiagnostics", async () => {
+    if (typeof license.runDiagnostics === "function") {
+      await license.runDiagnostics();
+      return;
+    }
+    vscode.window.showInformationMessage("License diagnostics not available in this build.");
+  });
+
   const detectCommand = vscode.commands.registerCommand("synapse.detect", async () => { // NEW:
     vscode.window.showInformationMessage("Synapse: Detect Conflicts (coming soon)");
   });
@@ -485,6 +494,7 @@ Use meaningful variable names
     convertToSkillCommand,
     upgradeProCommand,
     enterLicenseKeyCommand,
+    licenseDiagnosticsCommand,
     detectCommand, // NEW:
     wsConnectCommand,
     wsDisconnectCommand,

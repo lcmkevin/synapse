@@ -50,12 +50,15 @@ export class LicenseManager {
             data += chunk.toString();
           });
           res.on("end", () => {
-            try {
-              const json = data ? JSON.parse(data) : null;
-              resolve({ status: res.statusCode || 0, json });
-            } catch (e) {
-              reject(e);
+            let json: any = null;
+            if (data) {
+              try {
+                json = JSON.parse(data);
+              } catch {
+                json = null;
+              }
             }
+            resolve({ status: res.statusCode || 0, json });
           });
         }
       );
@@ -71,10 +74,13 @@ export class LicenseManager {
       const base = this.getApiBaseUrl();
       const instanceId = vscode.env.machineId || "unknown";
       const { status, json } = await this.postJson(`${base}/api/validate`, { licenseKey: key, instanceId });
-      if (status !== 200) return { valid: false, reason: "Validation failed" };
-      return { valid: !!json?.valid, reason: typeof json?.reason === "string" ? json.reason : undefined };
+      if (status === 200) {
+        return { valid: !!json?.valid, reason: typeof json?.reason === "string" ? json.reason : undefined };
+      }
+      const reason = typeof json?.reason === "string" ? json.reason : `License server error (${status})`;
+      return { valid: false, reason };
     } catch {
-      return { valid: false, reason: "Validation failed" };
+      return { valid: false, reason: "Cannot reach license server. Check Synapse › License Api Url." };
     }
   }
 
@@ -88,6 +94,13 @@ export class LicenseManager {
 
     const result = await this.validateWithServer(savedKey);
     this.isPro = result.valid;
+  }
+
+  private redactKey(key: string): string {
+    const trimmed = typeof key === "string" ? key.trim() : "";
+    if (!trimmed) return "(empty)";
+    if (trimmed.length <= 14) return `${trimmed.slice(0, 4)}…`;
+    return `${trimmed.slice(0, 10)}…${trimmed.slice(-4)}`;
   }
 
   isProUser(): boolean {
@@ -124,6 +137,49 @@ export class LicenseManager {
       if (key) await this.activateLicense(key);
     } else if (choice === "Learn More") {
       await vscode.env.openExternal(vscode.Uri.parse("https://www.labs-synapse.com/pricing"));
+    }
+  }
+
+  async runDiagnostics(): Promise<void> {
+    const base = this.getApiBaseUrl();
+    const instanceId = vscode.env.machineId || "unknown";
+    const channel = vscode.window.createOutputChannel("Synapse License");
+
+    const savedKey = this.context?.globalState.get<string>("licenseKey");
+    const key =
+      typeof savedKey === "string" && savedKey.trim()
+        ? savedKey.trim()
+        : await vscode.window.showInputBox({ prompt: "License key to validate", password: true });
+
+    channel.clear();
+    channel.appendLine(`licenseApiUrl: ${base}`);
+    channel.appendLine(`instanceId: ${instanceId}`);
+    channel.appendLine(`licenseKey: ${key ? this.redactKey(key) : "(not provided)"}`);
+
+    if (!key) {
+      channel.show(true);
+      vscode.window.showInformationMessage("License diagnostics opened.");
+      return;
+    }
+
+    try {
+      const { status, json } = await this.postJson(`${base}/api/validate`, { licenseKey: key, instanceId });
+      const reason =
+        typeof json?.reason === "string" ? json.reason : status === 200 ? undefined : `License server error (${status})`;
+      channel.appendLine(`status: ${status}`);
+      channel.appendLine(`response: ${JSON.stringify(json)}`);
+      channel.show(true);
+
+      if (status === 200 && json?.valid === true) {
+        vscode.window.showInformationMessage("License is valid.");
+      } else {
+        vscode.window.showWarningMessage(reason ? `License invalid: ${reason}` : "License invalid.");
+      }
+    } catch {
+      channel.appendLine("status: 0");
+      channel.appendLine("error: Cannot reach license server");
+      channel.show(true);
+      vscode.window.showErrorMessage("Cannot reach license server. Check Synapse › License Api Url.");
     }
   }
 
