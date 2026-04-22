@@ -75,12 +75,26 @@ export class LicenseManager {
       const instanceId = vscode.env.machineId || "unknown";
       const { status, json } = await this.postJson(`${base}/api/validate`, { licenseKey: key, instanceId });
       if (status === 200) {
-        return { valid: !!json?.valid, reason: typeof json?.reason === "string" ? json.reason : undefined };
+        const valid = !!json?.valid;
+        if (valid) return { valid: true };
+        const reason =
+          typeof json?.reason === "string"
+            ? json.reason
+            : typeof json?.error?.message === "string"
+              ? json.error.message
+              : "License rejected";
+        return { valid: false, reason };
       }
-      const reason = typeof json?.reason === "string" ? json.reason : `License server error (${status})`;
+      const reason =
+        typeof json?.reason === "string"
+          ? json.reason
+          : typeof json?.error?.message === "string"
+            ? json.error.message
+            : `License server error (${status})`;
       return { valid: false, reason };
-    } catch {
-      return { valid: false, reason: "Cannot reach license server. Check Synapse › License Api Url." };
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      return { valid: false, reason: `Cannot reach license server (${msg}). Check Synapse › License Api Url.` };
     }
   }
 
