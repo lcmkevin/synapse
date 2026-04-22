@@ -136,7 +136,7 @@ npm run compile
   - `Synapse: Initialize Project`
   - `Synapse: Sync Rules`
   - `Synapse: Analyze Tokens`
-  - `Synapse: Upgrade to Pro` (license prompt)
+  - `Synapse: Upgrade to Pro`
 
 - Package (VSIX):
 
@@ -144,19 +144,3 @@ npm run compile
 cd extension
 npx @vscode/vsce@2.26.0 package
 ```
-
-### Pro Testing (Dev Unlock)
-
-- Set environment variable `SYNAPSE_DEV=true` for the Extension Development Host process to unlock Pro-only features during development.
-
-## Launch Status
-
-| Metric | Target | Current |
-|--------|--------|---------|
-| GitHub Stars | 500 | - |
-| VS Code Installs | 5,000 | - |
-| Discord Members | 200 | - |
-| Pro Users | 50 | - |
-| Monthly Revenue | $450 | - |
-
-Detailed launch execution checklist: [LAUNCH_CHECKLIST.md](file:///c:/MyProgram/Trae/LAUNCH_CHECKLIST.md)
