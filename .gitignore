@@ -13,6 +13,9 @@ out/
 # IDE
 .vscode/
 .idea/
+.continue/
+.agents/
+.augment/
 
 # OS
 .DS_Store

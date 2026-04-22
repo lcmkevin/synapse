@@ -59,7 +59,9 @@ node .\bin\synapse-unified.js --help</code>
           <div class="panel">
             <h3>Initialize + sync</h3>
             <code>synapse init
-synapse sync --all
+synapse sync --all --conflict prompt
+synapse sync --dry-run --list-changes
+synapse analyze
 synapse watch</code>
           </div>
         </div>
@@ -78,6 +80,16 @@ synapse watch</code>
           <div class="panel">
             <h3>Cursor output</h3>
             <code>.cursor/rules/*.mdc</code>
+          </div>
+        </div>
+        <div class="two-col" style="margin-top:14px">
+          <div class="panel">
+            <h3>Zed output</h3>
+            <code>.rules</code>
+          </div>
+          <div class="panel">
+            <h3>Notes</h3>
+            <code>Zed auto-includes .rules in Agent context</code>
           </div>
         </div>
         <div class="two-col" style="margin-top:14px">

@@ -2,7 +2,7 @@
   "name": "synapse",
   "displayName": "Synapse Rules",
   "description": "One rulebase. Any IDE. Forever. Sync rules across Trae, Cursor, Windsurf, and more.",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "publisher": "labs-synapse",
   "icon": "icon.png",
   "repository": {
@@ -30,6 +30,7 @@
     "trae",
     "windsurf",
     "cline",
+    "zed",
     "token-optimization",
     "rule-sync"
   ],
@@ -201,6 +202,11 @@
           "type": "boolean",
           "default": false,
           "description": "Auto-connect VS Code to Synapse WebSocket sync server on workspace open."
+        },
+        "synapse.zedMode": {
+          "type": "boolean",
+          "default": false,
+          "description": "When enabled, also generate a root .rules file for Zed (auto-included in Zed Agent)."
         },
         "synapse.licenseApiUrl": {
           "type": "string",

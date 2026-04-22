@@ -3,11 +3,25 @@
 import * as vscode from "vscode";
 import * as fs from "fs/promises";
 import * as path from "path";
-import { IDEAdapter, SynapseRule, CompilationResult } from "./adapters/adapter.interface";
+import { IDEAdapter, SynapseRule, CompilationResult, AdapterOutput } from "./adapters/adapter.interface";
 import { TraeAdapter } from "./adapters/trae.adapter";
 import { CursorAdapter } from "./adapters/cursor.adapter";
 import { WindsurfAdapter } from "./adapters/windsurf.adapter";
 import { ClineAdapter } from "./adapters/cline.adapter";
+import { ZedAdapter } from "./adapters/zed.adapter";
+
+type ConflictMode = "overwrite" | "skip" | "prompt";
+
+type SyncOptions = {
+  allowedTargets?: string[];
+  conflictMode?: ConflictMode;
+  selectedRuleIds?: string[];
+};
+
+type ConflictState = {
+  overwriteAll: boolean;
+  skipAll: boolean;
+};
 
 export class AdapterManager {
   private adapters: Map<string, IDEAdapter> = new Map();
@@ -23,10 +37,12 @@ export class AdapterManager {
     const cursor = new CursorAdapter();
     const windsurf = new WindsurfAdapter();
     const cline = new ClineAdapter();
+    const zed = new ZedAdapter();
     this.adapters.set(trae.id, trae);
     this.adapters.set(cursor.id, cursor);
     this.adapters.set(windsurf.id, windsurf);
     this.adapters.set(cline.id, cline);
+    this.adapters.set(zed.id, zed);
   }
 
   private async loadEnabledTargets(): Promise<void> {
@@ -40,7 +56,72 @@ export class AdapterManager {
     }
   }
 
-  async compileToTarget(rule: SynapseRule, targetName: string, workspaceRoot: string): Promise<CompilationResult> {
+  private normalizeForCompare(text: string): string {
+    return String(text || "")
+      .replace(/\r\n/g, "\n")
+      .replace(/\r/g, "\n")
+      .trimEnd();
+  }
+
+  private async writeOutputFile(
+    outputFile: string,
+    compiled: string,
+    targetName: string,
+    conflictMode: ConflictMode,
+    state: ConflictState
+  ): Promise<CompilationResult> {
+    let existing: string | null = null;
+    try {
+      existing = await fs.readFile(outputFile, "utf8");
+    } catch {
+      existing = null;
+    }
+
+    if (existing !== null) {
+      const same = this.normalizeForCompare(existing) === this.normalizeForCompare(compiled);
+      if (same) return { success: true, outputPath: outputFile, targetIDE: targetName, warnings: ["Unchanged"] };
+
+      if (state.skipAll) {
+        return { success: true, outputPath: outputFile, targetIDE: targetName, warnings: ["Skipped existing file"] };
+      }
+      if (state.overwriteAll) {
+        await fs.writeFile(outputFile, compiled, "utf8");
+        return { success: true, outputPath: outputFile, targetIDE: targetName };
+      }
+
+      if (conflictMode === "skip") {
+        return { success: true, outputPath: outputFile, targetIDE: targetName, warnings: ["Skipped existing file"] };
+      }
+
+      if (conflictMode === "prompt") {
+        const choice = await vscode.window.showQuickPick(["Overwrite", "Skip", "Overwrite All", "Skip All", "Cancel Sync"], {
+          placeHolder: `${targetName}: ${path.basename(outputFile)} exists. Overwrite?`,
+        });
+        if (!choice || choice === "Cancel Sync") throw new Error("SYNC_CANCELED");
+        if (choice === "Skip") {
+          return { success: true, outputPath: outputFile, targetIDE: targetName, warnings: ["Skipped existing file"] };
+        }
+        if (choice === "Skip All") {
+          state.skipAll = true;
+          return { success: true, outputPath: outputFile, targetIDE: targetName, warnings: ["Skipped existing file"] };
+        }
+        if (choice === "Overwrite All") state.overwriteAll = true;
+        await fs.writeFile(outputFile, compiled, "utf8");
+        return { success: true, outputPath: outputFile, targetIDE: targetName };
+      }
+    }
+
+    await fs.writeFile(outputFile, compiled, "utf8");
+    return { success: true, outputPath: outputFile, targetIDE: targetName };
+  }
+
+  async compileToTarget(
+    rule: SynapseRule,
+    targetName: string,
+    workspaceRoot: string,
+    conflictMode: ConflictMode,
+    state: ConflictState
+  ): Promise<CompilationResult> {
     const adapter = Array.from(this.adapters.values()).find((a) => a.name.toLowerCase() === targetName.toLowerCase());
     if (!adapter) return { success: false, errors: [`No adapter for: ${targetName}`], targetIDE: targetName };
 
@@ -53,45 +134,89 @@ export class AdapterManager {
       await fs.mkdir(targetPath, { recursive: true });
 
       const outputFile = path.join(targetPath, `${rule.id}${adapter.targetExtension}`);
-      await fs.writeFile(outputFile, compiled, "utf8");
-
-      return { success: true, outputPath: outputFile, targetIDE: adapter.name };
+      return await this.writeOutputFile(outputFile, compiled, adapter.name, conflictMode, state);
     } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      if (msg === "SYNC_CANCELED") throw error;
       return { success: false, errors: [error instanceof Error ? error.message : String(error)], targetIDE: adapter.name };
     }
   }
 
-  async syncAllRules(workspaceRoot: string, allowedTargets?: string[]): Promise<CompilationResult[]> {
+  private async compileAllForAdapter(
+    adapter: IDEAdapter,
+    rules: SynapseRule[],
+    workspaceRoot: string,
+    conflictMode: ConflictMode,
+    state: ConflictState
+  ): Promise<CompilationResult[]> {
+    if (!adapter.compileAll) return [];
+    const outputs: AdapterOutput[] = await adapter.compileAll(rules);
+    const results: CompilationResult[] = [];
+    for (const out of outputs) {
+      const outputFile = path.join(workspaceRoot, out.relativePath);
+      await fs.mkdir(path.dirname(outputFile), { recursive: true });
+      const validation = await adapter.validate(out.content);
+      if (!validation.valid) {
+        results.push({ success: false, errors: validation.errors, targetIDE: adapter.name, outputPath: outputFile });
+        continue;
+      }
+      const r = await this.writeOutputFile(outputFile, out.content, adapter.name, conflictMode, state);
+      results.push(r);
+    }
+    return results;
+  }
+
+  async syncAllRules(workspaceRoot: string, options: SyncOptions = {}): Promise<CompilationResult[]> {
     await this.loadEnabledTargets();
     const masterPath = path.join(workspaceRoot, ".synapse", "rules");
     const results: CompilationResult[] = [];
+    const conflictMode: ConflictMode = options.conflictMode || "prompt";
+    const state: ConflictState = { overwriteAll: false, skipAll: false };
+    let processedRules = 0;
 
     try {
       const files = await fs.readdir(masterPath);
       const ruleFiles = files.filter((f) => f.endsWith(".synapse"));
+      const rules: SynapseRule[] = [];
 
       for (const file of ruleFiles) {
         const fullPath = path.join(masterPath, file);
         const content = await fs.readFile(fullPath, "utf8");
         const rule = await this.parseRule(content, fullPath);
+        if (options.selectedRuleIds && options.selectedRuleIds.length > 0 && !options.selectedRuleIds.includes(rule.id)) continue;
+        rules.push(rule);
+      }
 
-        for (const [adapterId, enabled] of this.enabledTargets) {
-          if (!enabled) continue;
-          const adapter = this.adapters.get(adapterId);
-          if (!adapter) continue;
-          if (allowedTargets && allowedTargets.length > 0) {
-            const name = adapter.name.toLowerCase();
-            if (!allowedTargets.map((t) => t.toLowerCase()).includes(name)) continue;
-          }
-          const result = await this.compileToTarget(rule, adapter.name, workspaceRoot);
-          results.push(result);
+      processedRules = rules.length;
+
+      for (const [adapterId, enabled] of this.enabledTargets) {
+        if (!enabled) continue;
+        const adapter = this.adapters.get(adapterId);
+        if (!adapter) continue;
+        if (options.allowedTargets && options.allowedTargets.length > 0) {
+          const name = adapter.name.toLowerCase();
+          if (!options.allowedTargets.map((t) => t.toLowerCase()).includes(name)) continue;
+        }
+
+        if (adapter.compileAll) {
+          results.push(...(await this.compileAllForAdapter(adapter, rules, workspaceRoot, conflictMode, state)));
+          continue;
+        }
+
+        for (const rule of rules) {
+          results.push(await this.compileToTarget(rule, adapter.name, workspaceRoot, conflictMode, state));
         }
       }
 
       const successCount = results.filter((r) => r.success).length;
-      vscode.window.showInformationMessage(`Synapse: Synced ${ruleFiles.length} rule(s) to ${successCount} output(s)`);
+      vscode.window.showInformationMessage(`Synapse: Synced ${processedRules} rule(s) to ${successCount} output(s)`);
     } catch (error) {
-      vscode.window.showErrorMessage(`Sync failed: ${error instanceof Error ? error.message : String(error)}`);
+      const msg = error instanceof Error ? error.message : String(error);
+      if (msg === "SYNC_CANCELED") {
+        vscode.window.showInformationMessage("Sync canceled.");
+        return results;
+      }
+      vscode.window.showErrorMessage(`Sync failed: ${msg}`);
     }
 
     return results;

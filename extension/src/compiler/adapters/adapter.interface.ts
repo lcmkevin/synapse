@@ -22,6 +22,11 @@ export interface CompilationResult {
   targetIDE: string;
 }
 
+export type AdapterOutput = {
+  relativePath: string;
+  content: string;
+};
+
 export interface IDEAdapter {
   id: string;
   name: string;
@@ -30,6 +35,7 @@ export interface IDEAdapter {
   targetFolder: string;
 
   compile(rule: SynapseRule, options?: { minify?: boolean }): Promise<string>;
+  compileAll?(rules: SynapseRule[], options?: { minify?: boolean }): Promise<AdapterOutput[]>;
   parse(content: string, filePath: string): Promise<SynapseRule>;
   validate(compiled: string): Promise<{ valid: boolean; errors?: string[] }>;
   getInstallInstructions(): string;

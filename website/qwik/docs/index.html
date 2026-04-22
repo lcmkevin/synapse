@@ -151,8 +151,10 @@ Command Palette → Synapse: Analyze Tokens</code></pre>
             <h2 id="cli">CLI</h2>
             <p>Use the CLI for automation and CI:</p>
             <pre><code>synapse init
-synapse sync --all
-synapse watch</code></pre>
+synapse sync --all --conflict prompt      # safe sync with prompts
+synapse sync --dry-run --list-changes     # preview changes only
+synapse analyze                           # find the biggest rules
+synapse watch                             # auto-sync on changes</code></pre>
 
             <h2 id="binaries">Native Binaries</h2>
             <p>You can build standalone executables with <code>pkg</code> (no Node.js required for end users).</p>
@@ -172,6 +174,12 @@ npm run build:binary:win
 .cursor/rules/  # Cursor output (.mdc)
 .windsurf/      # Windsurf output (.windsurfrules)
 .clinerules/    # Cline output (.md)</code></pre>
+            <p>Zed uses a root <code>.rules</code> file (auto-included in Agent context).</p>
+            <pre><code>.rules</code></pre>
+
+            <p>To avoid overwriting existing IDE rules, use:</p>
+            <pre><code>synapse sync --conflict prompt          # ask before overwrite
+synapse sync --rules my-rule,other-rule  # sync selected rules only</code></pre>
 
             <h2 id="token">Token Analysis</h2>
             <p>Analyze token usage and estimated cost per session to find the biggest wins quickly.</p>

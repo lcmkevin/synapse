@@ -245,7 +245,37 @@ Use meaningful variable names
       );
     }
 
-    await adapterManager.syncAllRules(workspaceRoot, activeTargets);
+    const rulesDir = path.join(workspaceRoot, ".synapse", "rules");
+    const files = await fs.readdir(rulesDir).catch(() => []);
+    const ruleFiles = files.filter((f) => f.endsWith(".synapse"));
+    if (ruleFiles.length === 0) {
+      vscode.window.showWarningMessage("No .synapse rules found");
+      return;
+    }
+
+    const mode = await vscode.window.showQuickPick(
+      ["Sync (safe)", "Sync and overwrite all outputs", "Sync and skip existing outputs", "Select rules to sync (safe)"],
+      { placeHolder: "Choose sync behavior" }
+    );
+    if (!mode) return;
+
+    let conflictMode: "overwrite" | "skip" | "prompt" = "prompt";
+    if (mode === "Sync and overwrite all outputs") conflictMode = "overwrite";
+    if (mode === "Sync and skip existing outputs") conflictMode = "skip";
+
+    let selectedRuleIds: string[] | undefined = undefined;
+    if (mode === "Select rules to sync (safe)") {
+      const picked = await vscode.window.showQuickPick(
+        ruleFiles.map((f) => ({ label: f, picked: true })),
+        { canPickMany: true, placeHolder: "Select Synapse rules to sync" }
+      );
+      if (!picked || picked.length === 0) return;
+      selectedRuleIds = picked.map((p) => path.basename(p.label, ".synapse"));
+    }
+
+    const zedMode = config.get<boolean>("zedMode", false);
+    const allowedTargets = zedMode ? [...activeTargets, "zed"] : activeTargets;
+    await adapterManager.syncAllRules(workspaceRoot, { allowedTargets, conflictMode, selectedRuleIds });
   });
 
   const addTargetCommand = vscode.commands.registerCommand("synapse.target.add", async () => { // NEW:

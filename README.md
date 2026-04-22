@@ -16,6 +16,7 @@ Synapse uses a project-local master folder:
   - Cursor: `.cursor/rules/*.mdc`
   - Windsurf: `.windsurf/*.windsurfrules`
   - Cline: `.clinerules/*.md`
+  - Zed: `.rules`
 - Use the dashboard for deploy/status/sync/preview workflows.
 
 ## Quick Start (CLI)
@@ -25,7 +26,8 @@ From this repo folder:
 ```powershell
 node .\bin\synapse-unified.js --help
 node .\bin\synapse-unified.js init
-node .\bin\synapse-unified.js sync --all
+node .\bin\synapse-unified.js sync --all --conflict prompt
+node .\bin\synapse-unified.js analyze
 ```
 
 ## Quick Start (Dashboard)
@@ -103,7 +105,9 @@ npm run dashboard
 ```powershell
 node .\bin\synapse-unified.js --help
 node .\bin\synapse-unified.js init
-node .\bin\synapse-unified.js sync --all
+node .\bin\synapse-unified.js sync --all --conflict prompt
+node .\bin\synapse-unified.js sync --dry-run --list-changes
+node .\bin\synapse-unified.js analyze --top 10 --threshold 2000
 ```
 
 ### CLI (Native Binaries)
