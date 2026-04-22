@@ -47,8 +47,6 @@ async function createCheckout(req, res) {
       "line_items[0][quantity]": 1,
       customer_email: customerEmail || undefined,
       billing_address_collection: "required",
-      "customer_update[address]": "auto",
-      "customer_update[name]": "auto",
       "tax_id_collection[enabled]": true,
       allow_promotion_codes: true,
     });
