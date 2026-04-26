@@ -1,5 +1,12 @@
 const https = require("https");
 
+function getStripeModeFromKey(apiKey) {
+  const k = String(apiKey || "");
+  if (k.startsWith("sk_test_")) return "test";
+  if (k.startsWith("sk_live_")) return "live";
+  return "unknown";
+}
+
 function readJsonBody(req) {
   return new Promise((resolve) => {
     if (req?.body && typeof req.body === "object") return resolve(req.body);
@@ -31,9 +38,15 @@ async function createCheckout(req, res) {
     const priceId = process.env.STRIPE_PRICE_ID;
     const successUrl = process.env.STRIPE_SUCCESS_URL;
     const cancelUrl = process.env.STRIPE_CANCEL_URL;
+    const mode = getStripeModeFromKey(apiKey);
 
     if (!apiKey || !priceId || !successUrl || !cancelUrl) {
-      return res.status(500).json({ ok: false, error: "Server misconfigured" });
+      return res.status(500).json({
+        ok: false,
+        error: "Server misconfigured",
+        mode,
+        hint: "Set STRIPE_SECRET_KEY, STRIPE_PRICE_ID, STRIPE_SUCCESS_URL, STRIPE_CANCEL_URL. For Stripe test mode, STRIPE_SECRET_KEY must start with sk_test_ and STRIPE_PRICE_ID must be a test-mode price.",
+      });
     }
 
     const body = await readJsonBody(req);
@@ -75,15 +88,34 @@ async function createCheckout(req, res) {
             if (status >= 200 && status < 300 && json?.url) {
               return res.status(200).json({ ok: true, url: json.url, id: json.id });
             }
-            return res.status(500).json({ ok: false, error: "Stripe error" });
+            const err = json && typeof json === "object" ? json.error : null;
+            const stripeMsg = err && typeof err.message === "string" ? err.message : "";
+            const hint =
+              mode === "test"
+                ? "This server is using Stripe test mode. Ensure STRIPE_PRICE_ID is a test-mode price and your Checkout product/price exists in test mode."
+                : mode === "live"
+                  ? "This server is using Stripe live mode. Ensure STRIPE_PRICE_ID is a live-mode price and exists in your live account."
+                  : "Ensure STRIPE_SECRET_KEY and STRIPE_PRICE_ID are set and match the same Stripe mode (test vs live).";
+            return res.status(502).json({
+              ok: false,
+              error: "Stripe error",
+              mode,
+              stripeStatus: status,
+              stripeMessage: stripeMsg || undefined,
+              stripeType: err && typeof err.type === "string" ? err.type : undefined,
+              stripeCode: err && typeof err.code === "string" ? err.code : undefined,
+              stripeParam: err && typeof err.param === "string" ? err.param : undefined,
+              stripeRequestLogUrl: err && typeof err.request_log_url === "string" ? err.request_log_url : undefined,
+              hint,
+            });
           } catch {
-            return res.status(500).json({ ok: false, error: "Stripe error" });
+            return res.status(502).json({ ok: false, error: "Stripe error", mode, stripeStatus: status });
           }
         });
       }
     );
 
-    reqStripe.on("error", () => res.status(500).json({ ok: false, error: "Stripe error" }));
+    reqStripe.on("error", () => res.status(502).json({ ok: false, error: "Stripe error", mode }));
     reqStripe.write(payload);
     reqStripe.end();
   } catch {

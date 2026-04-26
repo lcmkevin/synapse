@@ -22,7 +22,7 @@
 
     <section class="section" style="padding-top:140px">
       <h2 class="section-title">Simple, Transparent Pricing</h2>
-      <p class="section-subtitle">Start free. Upgrade when you need unlimited targets and Pro workflows.</p>
+      <p class="section-subtitle">Start free. Upgrade when you need unlimited targets, skill conversion, and one-click optimization.</p>
       <div class="pricing-grid">
         <div class="pricing-card">
           <h3>Free</h3>
@@ -31,6 +31,7 @@
             <li>✅ Token analysis</li>
             <li>✅ Cost dashboard</li>
             <li>✅ 2 IDE targets</li>
+            <li>✅ Local optimization (analysis)</li>
           </ul>
           <a class="btn btn-outline" href="./index.html#install">Get started</a>
         </div>
@@ -41,6 +42,7 @@
           <ul class="pricing-features">
             <li>✅ Unlimited IDE targets</li>
             <li>✅ Convert large rules to skills</li>
+            <li>✅ Optimize auto-fix (CLI + VS Code)</li>
             <li>✅ Pro license gate</li>
           </ul>
           <button class="btn btn-primary" id="proCheckoutBtn">Checkout → Get Pro key</button>
@@ -54,6 +56,32 @@
             <li>✅ Audit logs</li>
           </ul>
           <a class="btn btn-outline" href="./404.html">To be rolled out</a>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" style="padding-top:0">
+      <h2 class="section-title">Compare Plans</h2>
+      <p class="section-subtitle">See what you get in Free vs Pro at a glance.</p>
+      <div class="comparison-wrapper">
+        <div class="comparison">
+          <table>
+            <thead>
+              <tr><th>Feature</th><th>Free</th><th>Pro</th><th>Enterprise</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>Rule sync across IDEs</td><td class="check">✅</td><td class="check">✅</td><td class="check">✅</td></tr>
+              <tr><td>Token analysis + cost dashboard</td><td class="check">✅</td><td class="check">✅</td><td class="check">✅</td></tr>
+              <tr><td>Local optimization (analyze)</td><td class="check">✅</td><td class="check">✅</td><td class="check">✅</td></tr>
+              <tr><td>Local optimization (auto-fix)</td><td class="cross">❌</td><td class="check">✅</td><td class="check">✅</td></tr>
+              <tr><td>Local backups + restore</td><td class="check">✅</td><td class="check">✅</td><td class="check">✅</td></tr>
+              <tr><td>IDE targets</td><td>2</td><td>Unlimited</td><td>Unlimited</td></tr>
+              <tr><td>Convert large rules to skills</td><td class="cross">❌</td><td class="check">✅</td><td class="check">✅</td></tr>
+              <tr><td>Org policy controls</td><td class="cross">❌</td><td class="cross">❌</td><td class="check">✅</td></tr>
+              <tr><td>SSO / SCIM</td><td class="cross">❌</td><td class="cross">❌</td><td class="check">✅</td></tr>
+              <tr><td>Audit logs</td><td class="cross">❌</td><td class="cross">❌</td><td class="check">✅</td></tr>
+            </tbody>
+          </table>
         </div>
       </div>
     </section>
@@ -81,10 +109,20 @@
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ customerEmail: email }),
           });
-          const data = await resp.json();
+          const text = await resp.text();
+          const data = (() => {
+            try {
+              return text ? JSON.parse(text) : null;
+            } catch {
+              return null;
+            }
+          })();
           if (data && data.url) {
             window.location.href = data.url;
             return;
+          }
+          if (data && (data.stripeMessage || data.error)) {
+            alert(String(data.stripeMessage || data.error));
           }
         } catch {}
         window.location.href = "./docs/index.html#pro";

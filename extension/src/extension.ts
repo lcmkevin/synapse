@@ -52,6 +52,8 @@ export async function activate(context: vscode.ExtensionContext) {
   console.log("Synapse extension activated"); // NEW:
 
   const license = await loadLicenseManager(context);
+  const output = vscode.window.createOutputChannel("Synapse");
+  context.subscriptions.push(output);
 
   const adapterManager = new AdapterManager(context); // NEW:
   tokenCounter = new TokenCounter();
@@ -60,6 +62,43 @@ export async function activate(context: vscode.ExtensionContext) {
   const isProUser = () => license.isProUser();
   const importScanner = new ImportScanner();
   const formatConverter = new FormatConverter();
+
+  function formatUnknownError(err: unknown): { message: string; detail?: string } {
+    if (!err) return { message: "Unknown error" };
+    if (typeof err === "string") return { message: err };
+    if (err instanceof Error) {
+      const msg = typeof err.message === "string" && err.message.trim() ? err.message.trim() : err.name;
+      const detail = typeof err.stack === "string" && err.stack.trim() ? err.stack : undefined;
+      return { message: msg || "Error", detail };
+    }
+    try {
+      return { message: JSON.stringify(err) };
+    } catch {
+      return { message: String(err) };
+    }
+  }
+
+  async function showCommandError(label: string, err: unknown) {
+    const formatted = formatUnknownError(err);
+    const code = typeof (err as any)?.code === "string" ? String((err as any).code) : "";
+    const extra = code ? ` (${code})` : "";
+    output.appendLine(`[${new Date().toISOString()}] ${label}${extra}: ${formatted.message}`);
+    if (formatted.detail) output.appendLine(formatted.detail);
+
+    const actions = formatted.detail ? ["Show Details"] : [];
+    const picked = await vscode.window.showErrorMessage(`Synapse: ${label} failed: ${formatted.message}${extra}`, ...actions);
+    if (picked === "Show Details") output.show(true);
+  }
+
+  function safeCommand<TArgs extends unknown[]>(label: string, fn: (...args: TArgs) => Promise<void>) {
+    return async (...args: TArgs) => {
+      try {
+        await fn(...args);
+      } catch (err) {
+        await showCommandError(label, err);
+      }
+    };
+  }
 
   function connectToSynapseWS(workspaceRoot: string) {
     const port = vscode.workspace.getConfiguration("synapse").get("wsPort", 3457);
@@ -88,7 +127,7 @@ export async function activate(context: vscode.ExtensionContext) {
     wsClient.on("close", () => void 0);
   }
 
-  const initCommand = vscode.commands.registerCommand("synapse.init", async () => {
+  const initCommand = vscode.commands.registerCommand("synapse.init", safeCommand("Initialize Project", async () => {
     const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
     if (!workspaceRoot) {
       vscode.window.showErrorMessage("Please open a workspace folder first");
@@ -185,9 +224,9 @@ Use meaningful variable names
     } catch (error) {
       vscode.window.showErrorMessage(`Failed to initialize: ${error}`);
     }
-  });
+  }));
 
-  const importFromIdeCommand = vscode.commands.registerCommand("synapse.importFromIDE", async () => {
+  const importFromIdeCommand = vscode.commands.registerCommand("synapse.importFromIDE", safeCommand("Import From IDE", async () => {
     const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
     if (!workspaceRoot) return;
 
@@ -219,9 +258,9 @@ Use meaningful variable names
     }
 
     vscode.window.showInformationMessage(`✅ Imported ${selected.length} rule(s)`);
-  });
+  }));
 
-  const syncCommand = vscode.commands.registerCommand("synapse.sync", async () => {
+  const syncCommand = vscode.commands.registerCommand("synapse.sync", safeCommand("Sync Rules", async () => {
     const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath; // NEW:
     if (!workspaceRoot) {
       vscode.window.showErrorMessage("Open a workspace first");
@@ -276,13 +315,13 @@ Use meaningful variable names
     const zedMode = config.get<boolean>("zedMode", false);
     const allowedTargets = zedMode ? [...activeTargets, "zed"] : activeTargets;
     await adapterManager.syncAllRules(workspaceRoot, { allowedTargets, conflictMode, selectedRuleIds });
-  });
+  }));
 
-  const addTargetCommand = vscode.commands.registerCommand("synapse.target.add", async () => { // NEW:
+  const addTargetCommand = vscode.commands.registerCommand("synapse.target.add", safeCommand("Add Target IDE", async () => { // NEW:
     const targets = adapterManager.getAvailableTargets();
     const selected = await vscode.window.showQuickPick(targets, { placeHolder: "Select IDE to add" });
     if (selected) await adapterManager.addTarget(selected);
-  });
+  }));
 
   async function runTokenAnalysis() {
     const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
@@ -390,15 +429,15 @@ Use meaningful variable names
 </html>`;
   }
 
-  const analyzeTokensCommand = vscode.commands.registerCommand("synapse.analyzeTokens", async () => {
+  const analyzeTokensCommand = vscode.commands.registerCommand("synapse.analyzeTokens", safeCommand("Analyze Tokens", async () => {
     await runTokenAnalysis();
-  });
+  }));
 
-  const analyzeCommand = vscode.commands.registerCommand("synapse.analyze", async () => {
+  const analyzeCommand = vscode.commands.registerCommand("synapse.analyze", safeCommand("Analyze Tokens", async () => {
     await vscode.commands.executeCommand("synapse.analyzeTokens");
-  });
+  }));
 
-  const convertToSkillCommand = vscode.commands.registerCommand("synapse.convertToSkill", async () => {
+  const convertToSkillCommand = vscode.commands.registerCommand("synapse.convertToSkill", safeCommand("Convert Rules To Skills", async () => {
     const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
     if (!workspaceRoot) return;
 
@@ -452,14 +491,14 @@ Use meaningful variable names
       const saved = Math.round(results.reduce((sum, r) => sum + (r.tokensSaved || 0), 0));
       vscode.window.showInformationMessage(`Converted ${successCount} rule(s) to skills. Estimated savings: ${saved.toLocaleString()} tokens/session`);
     }
-  });
+  }));
 
-  const upgradeProCommand = vscode.commands.registerCommand("synapse.upgradePro", async () => {
+  const upgradeProCommand = vscode.commands.registerCommand("synapse.upgradePro", safeCommand("Upgrade To Pro", async () => {
     await license.showUpgradePrompt();
     skillConverter = new SkillConverter(context);
-  });
+  }));
 
-  const enterLicenseKeyCommand = vscode.commands.registerCommand("synapse.enterLicenseKey", async () => {
+  const enterLicenseKeyCommand = vscode.commands.registerCommand("synapse.enterLicenseKey", safeCommand("Enter License Key", async () => {
     const key = await vscode.window.showInputBox({ prompt: "Enter your Synapse Pro license key" });
     if (!key) return;
 
@@ -471,21 +510,74 @@ Use meaningful variable names
 
     await context.globalState.update("licenseKey", key);
     vscode.window.showInformationMessage("License key saved. Restart with Pro module to validate.");
-  });
+  }));
 
-  const licenseDiagnosticsCommand = vscode.commands.registerCommand("synapse.licenseDiagnostics", async () => {
+  const licenseDiagnosticsCommand = vscode.commands.registerCommand("synapse.licenseDiagnostics", safeCommand("License Diagnostics", async () => {
     if (typeof license.runDiagnostics === "function") {
       await license.runDiagnostics();
       return;
     }
     vscode.window.showInformationMessage("License diagnostics not available in this build.");
-  });
+  }));
 
-  const detectCommand = vscode.commands.registerCommand("synapse.detect", async () => { // NEW:
+  const optimizeCommand = vscode.commands.registerCommand("synapse.optimize", safeCommand("Optimize Rules", async () => {
+    const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+    if (!workspaceRoot) {
+      vscode.window.showErrorMessage("Open a workspace first");
+      return;
+    }
+
+    const isPro = license.isProUser();
+    const choice = await vscode.window.showInformationMessage(
+      "Analyze rules for token waste, conflicts, and structure issues? (Local only)",
+      "Analyze Only",
+      isPro ? "Analyze & Auto-Fix" : "Upgrade to Pro for Auto-Fix",
+      "Cancel"
+    );
+
+    if (!choice || choice === "Cancel") return;
+
+    if (choice === "Upgrade to Pro for Auto-Fix") {
+      await vscode.commands.executeCommand("synapse.upgradePro");
+      return;
+    }
+
+    const terminal = vscode.window.createTerminal("Synapse Optimizer");
+    terminal.show();
+    terminal.sendText(`cd "${workspaceRoot}"`);
+    if (choice === "Analyze & Auto-Fix") terminal.sendText("synapse optimize --backup --apply");
+    else terminal.sendText("synapse optimize --backup");
+  }));
+
+  const backupCommand = vscode.commands.registerCommand("synapse.backup", safeCommand("Manage Backups", async () => {
+    const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+    if (!workspaceRoot) {
+      vscode.window.showErrorMessage("Open a workspace first");
+      return;
+    }
+
+    const action = await vscode.window.showQuickPick(["List Backups", "Restore Backup"], { placeHolder: "Backup action" });
+    if (!action) return;
+
+    const terminal = vscode.window.createTerminal("Synapse Backups");
+    terminal.show();
+    terminal.sendText(`cd "${workspaceRoot}"`);
+
+    if (action === "List Backups") {
+      terminal.sendText("synapse backup list");
+      return;
+    }
+
+    const name = await vscode.window.showInputBox({ prompt: "Backup name (e.g., backup_2026-04-22T...)" });
+    if (!name) return;
+    terminal.sendText(`synapse backup restore --backup ${name}`);
+  }));
+
+  const detectCommand = vscode.commands.registerCommand("synapse.detect", safeCommand("Detect Conflicts", async () => { // NEW:
     vscode.window.showInformationMessage("Synapse: Detect Conflicts (coming soon)");
-  });
+  }));
 
-  const wsConnectCommand = vscode.commands.registerCommand("synapse.ws.connect", async () => {
+  const wsConnectCommand = vscode.commands.registerCommand("synapse.ws.connect", safeCommand("WS Connect", async () => {
     const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
     if (!workspaceRoot) {
       vscode.window.showErrorMessage("Open a workspace first");
@@ -493,9 +585,9 @@ Use meaningful variable names
     }
     connectToSynapseWS(workspaceRoot);
     vscode.window.showInformationMessage("Synapse: WS connect requested");
-  });
+  }));
 
-  const wsDisconnectCommand = vscode.commands.registerCommand("synapse.ws.disconnect", async () => {
+  const wsDisconnectCommand = vscode.commands.registerCommand("synapse.ws.disconnect", safeCommand("WS Disconnect", async () => {
     try {
       wsClient?.close();
     } catch {
@@ -503,7 +595,7 @@ Use meaningful variable names
     }
     wsClient = null;
     vscode.window.showInformationMessage("Synapse: WS disconnected");
-  });
+  }));
 
   const autoConnect = vscode.workspace.getConfiguration("synapse").get("wsAutoConnect", false);
   const workspaceRootForAuto = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
@@ -525,6 +617,8 @@ Use meaningful variable names
     upgradeProCommand,
     enterLicenseKeyCommand,
     licenseDiagnosticsCommand,
+    optimizeCommand,
+    backupCommand,
     detectCommand, // NEW:
     wsConnectCommand,
     wsDisconnectCommand,

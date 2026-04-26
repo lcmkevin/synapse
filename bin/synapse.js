@@ -4,6 +4,7 @@
 const fs = require("fs");
 const fsp = fs.promises;
 const path = require("path");
+const { printCliError } = require(path.resolve(__dirname, "..", "src", "error-handler.js"));
 
 function printHelp() {
   process.stdout.write(
@@ -137,6 +138,5 @@ async function main() {
 }
 
 main().catch((err) => {
-  process.stderr.write(String(err && err.stack ? err.stack : err) + "\n");
-  process.exitCode = 1;
+  printCliError(err);
 });

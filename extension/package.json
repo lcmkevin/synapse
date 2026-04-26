@@ -64,7 +64,9 @@
     "onCommand:synapse.target.add",
     "onCommand:synapse.ws.connect",
     "onCommand:synapse.ws.disconnect",
-    "onCommand:synapse.importFromIDE"
+    "onCommand:synapse.importFromIDE",
+    "onCommand:synapse.optimize",
+    "onCommand:synapse.backup"
   ],
   "main": "./out/extension.js",
   "contributes": {
@@ -132,6 +134,16 @@
       {
         "command": "synapse.importFromIDE",
         "title": "Synapse: Import Rules from IDE",
+        "category": "Synapse"
+      },
+      {
+        "command": "synapse.optimize",
+        "title": "Synapse: Optimize Rules (Local)",
+        "category": "Synapse"
+      },
+      {
+        "command": "synapse.backup",
+        "title": "Synapse: Manage Backups",
         "category": "Synapse"
       }
     ],

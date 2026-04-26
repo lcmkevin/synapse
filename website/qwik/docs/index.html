@@ -114,6 +114,7 @@
             <h4>Features</h4>
             <a href="#sync">Syncing Rules</a>
             <a href="#token">Token Analysis</a>
+            <a href="#optimize">Local Optimization</a>
             <a href="#dashboard">Cost Dashboard</a>
             <a href="#pro">Pro License</a>
             <a href="#servers">MCP + WebSocket</a>
@@ -154,6 +155,12 @@ Command Palette → Synapse: Analyze Tokens</code></pre>
 synapse sync --all --conflict prompt      # safe sync with prompts
 synapse sync --dry-run --list-changes     # preview changes only
 synapse analyze                           # find the biggest rules
+synapse optimize                          # local rule optimization (free analysis)
+synapse optimize --backup                 # create a local backup before analyzing
+synapse optimize --apply                  # apply auto-fixes (Pro)
+synapse backup list                       # list local backups
+synapse backup restore --backup &lt;name&gt;      # restore a backup
+synapse enter-license                     # save Pro key for CLI features
 synapse watch                             # auto-sync on changes</code></pre>
 
             <h2 id="binaries">Native Binaries</h2>
@@ -184,6 +191,15 @@ synapse sync --rules my-rule,other-rule  # sync selected rules only</code></pre>
             <h2 id="token">Token Analysis</h2>
             <p>Analyze token usage and estimated cost per session to find the biggest wins quickly.</p>
 
+            <h2 id="optimize">Local Optimization</h2>
+            <p>Run a local optimizer to detect token waste, redundancy, missing constraints, and potential conflicts. Everything runs 100% locally (no bandwidth).</p>
+            <pre><code>synapse optimize</code></pre>
+            <p>Pro can apply safe auto-fixes and creates a backup under <code>~/.synapse/backups/</code>:</p>
+            <pre><code>synapse optimize --backup --apply</code></pre>
+            <p>To undo, restore a backup:</p>
+            <pre><code>synapse backup list
+synapse backup restore --backup backup_2026-04-22T...</code></pre>
+
             <h2 id="dashboard">Cost Dashboard</h2>
             <p>Open the “Cost Dashboard” sidebar view to see totals, top rules, and recommendations.</p>
 
@@ -198,15 +214,12 @@ synapse sync --rules my-rule,other-rule  # sync selected rules only</code></pre>
 Enter License Key</code></pre>
             <p>Pro keys are validated by the server (HMAC signature + database status). Revoked or expired keys stop working.</p>
 
-            <h3 id="pro-dev">Pro (Developer)</h3>
-            <pre><code>VS Code "Upgrade to Pro"
-→ POST /api/create-checkout (returns Stripe Checkout URL)
-→ Stripe Checkout success
-→ POST /api/webhooks/stripe (verified by STRIPE_WEBHOOK_SECRET)
-→ generate license key → upsert licenses row in Supabase
-→ user enters key (Synapse: Enter License Key)
-→ POST /api/validate (HMAC + DB check) → unlock</code></pre>
-            <p>Key delivery (email / portal) is a separate step and can be implemented with your email provider after webhook writes the license row.</p>
+            <h3 id="pro-features">Pro Features</h3>
+            <pre><code>- Unlimited IDE targets (Trae, Cursor, Windsurf, Cline, Zed, ...)
+- Optional lazy-loaded skills to reduce prompt size and token cost
+- Server-validated license key (revocable, time-bound)</code></pre>
+            <p>How activation works: you complete checkout, receive a license key, then enter it in VS Code. The extension validates it against the server before unlocking Pro.</p>
+            <p>Pro also unlocks CLI auto-fix in <code>synapse optimize --apply</code> (license validated by the server).</p>
 
             <h2 id="servers">MCP + WebSocket</h2>
             <p>Run standalone servers to integrate with external tools:</p>

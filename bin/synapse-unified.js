@@ -4,6 +4,7 @@ const { Command } = require("commander");
 const { spawn } = require("child_process");
 const fs = require("fs-extra");
 const path = require("path");
+const { SynapseError, printCliError } = require(path.resolve(__dirname, "..", "src", "error-handler.js"));
 
 const program = new Command();
 const isCompiled = typeof process.pkg !== "undefined";
@@ -34,7 +35,12 @@ function configPath() {
 async function ensureInitialized() {
   const root = synapseDir();
   if (!(await fs.pathExists(root))) {
-    throw new Error('Run "synapse init" first');
+    throw new SynapseError({
+      code: "E_NOT_INITIALIZED",
+      message: "Synapse is not initialized in this folder.",
+      suggestion: "Initialize Synapse once, then retry your command.",
+      commandHint: "synapse init",
+    });
   }
 }
 
@@ -621,6 +627,201 @@ program
     }
   });
 
+function isProEnabledForCli() {
+  if (process.env.SYNAPSE_DEV === "true") return true;
+  const v = process.env.SYNAPSE_PRO;
+  return typeof v === "string" && ["1", "true", "yes", "on"].includes(v.trim().toLowerCase());
+}
+
+program
+  .command("optimize")
+  .description("Optimize local rules/skills (local-only). Free: analyze. Pro: apply fixes.")
+  .option("--apply", "Apply auto-fixes (Pro)")
+  .option("--backup", "Create a local backup before running")
+  .option("--dry-run", "Show what would change without writing files (Pro for apply)")
+  .action(async (options) => {
+    await ensureInitialized();
+
+    const { LocalOptimizer } = require(path.resolve(__dirname, "..", "src", "optimizer.js"));
+    const { BackupManager } = require(path.resolve(__dirname, "..", "src", "backup.js"));
+    const { isProUser, showUpgradeMessage } = require(path.resolve(__dirname, "..", "src", "license-check.js"));
+
+    const rp = rulesDir();
+    const shouldBackup = !!options.backup || !!options.apply;
+    if (shouldBackup) {
+      const backupManager = new BackupManager();
+      const backupPath = await backupManager.createBackup(process.cwd());
+      process.stdout.write(`📦 Backup saved to: ${backupPath}\n\n`);
+    }
+
+    const optimizer = new LocalOptimizer();
+    let result;
+    try {
+      result = await optimizer.analyzeAllRules(rp);
+    } finally {
+      optimizer.dispose();
+    }
+
+    const issues = Array.isArray(result.issues) ? result.issues : [];
+    const bySeverity = { info: 0, warning: 0, error: 0 };
+    for (const i of issues) {
+      if (i && typeof i.severity === "string" && Object.prototype.hasOwnProperty.call(bySeverity, i.severity)) bySeverity[i.severity] += 1;
+    }
+
+    process.stdout.write(`🧠 Total tokens (est): ${Number(result.totalTokens || 0).toLocaleString()}\n`);
+    process.stdout.write(`💡 Potential savings (est): ${Number(result.potentialSavings || 0).toLocaleString()}\n`);
+    process.stdout.write(
+      `🧾 Issues: ${issues.length} (info: ${bySeverity.info}, warning: ${bySeverity.warning}, error: ${bySeverity.error})\n`
+    );
+    process.stdout.write(`🛠️ Auto-fixable: ${Number(result.fixableCount || 0)}\n\n`);
+
+    const topIssues = issues.slice(0, 25).map((i) => ({
+      rule: i.ruleName,
+      severity: i.severity,
+      type: i.type,
+      savings: i.estimatedSavings || 0,
+      message: i.message,
+    }));
+    if (topIssues.length) console.table(topIssues);
+
+    if (!options.apply) {
+      if (Number(result.fixableCount || 0) > 0) {
+        process.stdout.write("\nTo apply auto-fixes (Pro): synapse optimize --apply\n");
+      }
+      return;
+    }
+
+    const proOk = isProEnabledForCli() ? true : await isProUser();
+    if (!proOk) {
+      showUpgradeMessage();
+      process.exitCode = 1;
+      return;
+    }
+
+    const files = await fs.readdir(rp).catch(() => []);
+    const ruleFiles = files.filter((f) => String(f).toLowerCase().endsWith(".synapse"));
+    if (ruleFiles.length === 0) {
+      process.stdout.write("⚠️ No .synapse files found\n");
+      return;
+    }
+
+    const optimizer2 = new LocalOptimizer();
+    const changed = [];
+    try {
+      for (const file of ruleFiles) {
+        const p = path.join(rp, file);
+        const content = await fs.readFile(p, "utf8");
+        const perIssues = await optimizer2.analyzeRule(content, file);
+        const fixable = perIssues.filter((i) => i && i.autoFixable);
+        if (!fixable.length) continue;
+        const next = await optimizer2.applyAutoFix(content, fixable);
+        if (next !== content) {
+          if (!options.dryRun) {
+            await fs.writeFile(p, next, "utf8");
+          }
+          changed.push(file);
+        }
+      }
+    } finally {
+      optimizer2.dispose();
+    }
+
+    if (options.dryRun) {
+      process.stdout.write(`\n✅ Dry run complete. ${changed.length} file(s) would change\n`);
+      for (const f of changed.slice(0, 50)) process.stdout.write(`  - ${f}\n`);
+      return;
+    }
+
+    process.stdout.write(`\n✅ Applied fixes to ${changed.length} file(s)\n`);
+    process.stdout.write("Run: synapse sync --all --conflict prompt\n");
+  });
+
+program
+  .command("backup")
+  .description("Manage local backups")
+  .argument("<action>", "list, restore")
+  .option("--backup <name>", "Backup folder name for restore (e.g., backup_2026-04-22T...)")
+  .action(async (action, options) => {
+    const { BackupManager } = require(path.resolve(__dirname, "..", "src", "backup.js"));
+    const mgr = new BackupManager();
+    const a = String(action || "").trim().toLowerCase();
+    if (a === "list") {
+      const backups = await mgr.listBackups();
+      if (backups.length === 0) {
+        process.stdout.write("📦 No backups found\n");
+        return;
+      }
+      process.stdout.write("📦 Available backups:\n");
+      for (const b of backups) process.stdout.write(`  - ${b}\n`);
+      return;
+    }
+    if (a === "restore") {
+      const name = typeof options.backup === "string" ? options.backup.trim() : "";
+      if (!name) {
+        process.stdout.write("❌ Specify backup name: --backup <name>\n");
+        process.stdout.write("Run: synapse backup list\n");
+        process.exitCode = 1;
+        return;
+      }
+      const backupPath = path.join(require("os").homedir(), ".synapse", "backups", name);
+      await mgr.restore(backupPath, process.cwd());
+      process.stdout.write("✅ Restore complete. Run: synapse sync --all\n");
+      return;
+    }
+    process.stdout.write("❌ Unknown action. Use: list, restore\n");
+    process.exitCode = 1;
+  });
+
+program
+  .command("enter-license")
+  .description("Save your Synapse Pro license key for CLI features")
+  .argument("[key]", "Your license key (if omitted, will prompt)")
+  .action(async (key) => {
+    const readline = require("readline");
+    const { getApiBaseUrl, saveLicenseKey } = require(path.resolve(__dirname, "..", "src", "license-check.js"));
+
+    const promptKey = async () =>
+      new Promise((resolve) => {
+        const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+        rl.question("Enter your license key: ", (answer) => {
+          rl.close();
+          resolve(answer);
+        });
+      });
+
+    const licenseKey = (typeof key === "string" && key.trim()) ? key.trim() : String(await promptKey()).trim();
+    if (!licenseKey) {
+      process.stdout.write("❌ No license key provided\n");
+      process.exitCode = 1;
+      return;
+    }
+
+    if (process.env.SYNAPSE_OFFLINE === "true") {
+      process.stdout.write("❌ Cannot validate license while SYNAPSE_OFFLINE=true\n");
+      process.exitCode = 1;
+      return;
+    }
+
+    let ok = false;
+    try {
+      const { isProUser } = require(path.resolve(__dirname, "..", "src", "license-check.js"));
+      await saveLicenseKey(licenseKey);
+      ok = await isProUser();
+      if (!ok) {
+        process.stdout.write("❌ Invalid or inactive license key\n");
+        process.exitCode = 1;
+        return;
+      }
+    } catch {
+      process.stdout.write("❌ License validation failed\n");
+      process.stdout.write(`Check: ${getApiBaseUrl()}/api/validate\n`);
+      process.exitCode = 1;
+      return;
+    }
+
+    process.stdout.write("✅ License activated for CLI\n");
+  });
+
 program
   .command("watch")
   .description("Watch .synapse/ and auto-sync on changes")
@@ -734,7 +935,12 @@ program
     const p = String(options.port || "3456");
     const serverPath = path.resolve(__dirname, "..", "src", "server.js");
     if (!(await fs.pathExists(serverPath))) {
-      throw new Error(`Dashboard server not found: ${serverPath}`);
+      throw new SynapseError({
+        code: "E_DASHBOARD_MISSING",
+        message: "Dashboard server is missing from this install.",
+        suggestion: "Reinstall Synapse from npm, or use the full Node.js install (not the standalone binary).",
+        details: { serverPath },
+      });
     }
     process.stdout.write(`🚀 Starting dashboard on port ${p}...\n`);
     await startNodeProcess("dashboard", [serverPath], { SYNAPSE_PORT: p });
@@ -821,7 +1027,6 @@ program
   });
 
 program.parseAsync(process.argv).catch((err) => {
-  process.stderr.write(String(err && err.stack ? err.stack : err) + "\n");
-  process.exitCode = 1;
+  printCliError(err);
 });
 
