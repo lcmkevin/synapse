@@ -40,8 +40,8 @@ GitHub Actions only runs workflows that exist on GitHub, so the workflow must be
 2. Go to GitHub → Actions → “Supabase Keepalive”.
 3. Click “Run workflow” (manual trigger is enabled by `workflow_dispatch`).
 4. Open the run logs:
-   - Success looks like `OK`
-   - Failures will show which endpoint returned a non-2xx status
+   - Success looks like `OK: <service> (HTTP 200)`
+   - Failures show which endpoint failed, its HTTP status, and the first part of the response body (no secrets are printed)
 
 ## Notes / Troubleshooting
 
@@ -49,3 +49,7 @@ GitHub Actions only runs workflows that exist on GitHub, so the workflow must be
 - If requests fail with 401/403:
   - verify you used the `anon public` key (not service_role, not a JWT access token)
   - verify `SUPABASE_URL` is the project URL (no trailing spaces)
+- If requests fail with 404:
+  - verify `SUPABASE_URL` looks like `https://<project-ref>.supabase.co`
+- If requests fail with 5xx:
+  - the project may be paused or unhealthy; restore it in the Supabase dashboard first, then re-run the workflow
