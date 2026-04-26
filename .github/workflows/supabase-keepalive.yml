@@ -50,25 +50,24 @@ jobs:
               return 1
             fi
 
-            if [ "${http_code}" -lt 200 ] || [ "${http_code}" -ge 300 ]; then
-              echo "ERROR: ${label} returned HTTP ${http_code}"
-              echo "URL: ${url}"
-              if [ -f "${body_file}" ]; then
-                echo "Body (first 400 chars):"
-                head -c 400 "${body_file}" || true
-                echo ""
-              fi
-              return 1
+            if [ "${http_code}" -ge 200 ] && [ "${http_code}" -lt 300 ]; then
+              echo "OK: ${label} (HTTP ${http_code})"
+              return 0
             fi
 
-            echo "OK: ${label} (HTTP ${http_code})"
-            return 0
+            echo "WARN: ${label} returned HTTP ${http_code}"
+            echo "URL: ${url}"
+            if [ -f "${body_file}" ]; then
+              echo "Body (first 400 chars):"
+              head -c 400 "${body_file}" || true
+              echo ""
+            fi
+            return 1
           }
 
           ok=0
 
           if ping "Auth health" "${BASE}/auth/v1/health"; then ok=$((ok+1)); fi
-          if ping "REST root" "${BASE}/rest/v1/"; then ok=$((ok+1)); fi
 
           if [ "${ok}" -ge 1 ]; then
             echo "Keepalive OK (${ok} endpoint(s) succeeded)"
