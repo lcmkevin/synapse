@@ -40,5 +40,7 @@ npm-debug.log*
 .cursor/
 .windsurf/
 .cline/
+local_docs/
+synapse-pro/
 
 !packages/pro/
