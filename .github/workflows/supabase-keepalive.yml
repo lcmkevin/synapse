@@ -62,8 +62,18 @@ jobs:
             fi
 
             echo "OK: ${label} (HTTP ${http_code})"
+            return 0
           }
 
-          ping "Auth health" "${BASE}/auth/v1/health"
-          ping "Realtime health" "${BASE}/realtime/v1/health"
-          ping "Storage health" "${BASE}/storage/v1/health"
+          ok=0
+
+          if ping "Auth health" "${BASE}/auth/v1/health"; then ok=$((ok+1)); fi
+          if ping "REST root" "${BASE}/rest/v1/"; then ok=$((ok+1)); fi
+
+          if [ "${ok}" -ge 1 ]; then
+            echo "Keepalive OK (${ok} endpoint(s) succeeded)"
+            exit 0
+          fi
+
+          echo "Keepalive FAILED (no endpoints succeeded)"
+          exit 1

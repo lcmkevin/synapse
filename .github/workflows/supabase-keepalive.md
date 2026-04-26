@@ -6,10 +6,9 @@ This repo includes a scheduled GitHub Actions workflow that pings your Supabase 
 
 - Workflow file: `.github/workflows/supabase-keepalive.yml`
 - Schedule: daily (see the `cron` in the workflow)
-- Calls Supabase health endpoints using your project URL + anon key:
+- Pings at least one Supabase endpoint using your project URL + anon key (job succeeds if any ping returns 2xx):
   - `${SUPABASE_URL}/auth/v1/health`
-  - `${SUPABASE_URL}/realtime/v1/health`
-  - `${SUPABASE_URL}/storage/v1/health`
+  - `${SUPABASE_URL}/rest/v1/`
 
 ## Where To Find The Keys In Supabase
 
