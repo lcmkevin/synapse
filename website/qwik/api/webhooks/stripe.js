@@ -10,6 +10,83 @@ function generateLicenseKey() {
   return `synapse_${timestampBase36}_${signatureHex}`;
 }
 
+function getEmailConfig() {
+  const host = process.env.SMTP_HOST;
+  const portRaw = process.env.SMTP_PORT;
+  const user = process.env.SMTP_USER;
+  const pass = process.env.SMTP_PASS;
+  const from = process.env.EMAIL_FROM;
+  const replyTo = process.env.EMAIL_REPLY_TO;
+  const secureRaw = process.env.SMTP_SECURE;
+
+  if (!host || !portRaw || !user || !pass || !from) return null;
+  const port = Number(portRaw);
+  if (!Number.isFinite(port) || port <= 0) return null;
+  const secure = typeof secureRaw === "string" ? secureRaw.trim().toLowerCase() === "true" : port === 465;
+
+  return {
+    host,
+    port,
+    secure,
+    user,
+    pass,
+    from,
+    replyTo: typeof replyTo === "string" && replyTo.trim() ? replyTo.trim() : undefined,
+  };
+}
+
+async function sendLicenseEmail({ to, licenseKey, planCode, reason }) {
+  const cfg = getEmailConfig();
+  if (!cfg) return { ok: false, skipped: true };
+  const email = typeof to === "string" ? to.trim() : "";
+  if (!email) return { ok: false, skipped: true };
+
+  let nodemailer;
+  try {
+    nodemailer = require("nodemailer");
+  } catch {
+    return { ok: false, skipped: true };
+  }
+
+  const transporter = nodemailer.createTransport({
+    host: cfg.host,
+    port: cfg.port,
+    secure: cfg.secure,
+    auth: { user: cfg.user, pass: cfg.pass },
+  });
+
+  const subject = "Your Synapse Pro license key";
+  const lines = [];
+  lines.push("Thanks for purchasing Synapse Pro.");
+  lines.push("");
+  lines.push(`Plan: ${planCode || "pro_lifetime"}`);
+  lines.push(`License key: ${licenseKey}`);
+  lines.push("");
+  lines.push("Activate:");
+  lines.push("1) synapse enter-license");
+  lines.push("2) paste your key");
+  lines.push("");
+  lines.push("If you need to resend your key later:");
+  lines.push("https://labs-synapse.com/pro/resend/");
+  if (reason) {
+    lines.push("");
+    lines.push(`Reason: ${reason}`);
+  }
+
+  try {
+    await transporter.sendMail({
+      from: cfg.from,
+      to: email,
+      replyTo: cfg.replyTo,
+      subject,
+      text: lines.join("\n"),
+    });
+    return { ok: true };
+  } catch {
+    return { ok: false };
+  }
+}
+
 function requestJson(method, urlString, headers, body) {
   return new Promise((resolve, reject) => {
     const url = new URL(urlString);
@@ -131,6 +208,39 @@ async function upsertLicense(record) {
   if (status !== 201 && status !== 200 && status !== 204) throw new Error("DB write failed");
 }
 
+async function findLicenseByCheckoutSessionId(checkoutSessionId) {
+  const cfg = getSupabaseConfig();
+  if (!cfg) return null;
+  const id = typeof checkoutSessionId === "string" ? checkoutSessionId.trim() : "";
+  if (!id) return null;
+
+  const url = new URL(`${cfg.url}/rest/v1/licenses`);
+  url.searchParams.set("select", "license_key,email,status,plan_code,stripe_checkout_session_id");
+  url.searchParams.set("stripe_checkout_session_id", `eq.${id}`);
+  url.searchParams.set("limit", "1");
+
+  const { status, json } = await requestJson("GET", url.toString(), { apikey: cfg.key, Authorization: `Bearer ${cfg.key}` });
+  if (status >= 200 && status < 300 && Array.isArray(json) && json[0] && json[0].license_key) return json[0];
+  return null;
+}
+
+async function findActiveLicenseByEmail(email) {
+  const cfg = getSupabaseConfig();
+  if (!cfg) return null;
+  const e = typeof email === "string" ? email.trim().toLowerCase() : "";
+  if (!e) return null;
+
+  const url = new URL(`${cfg.url}/rest/v1/licenses`);
+  url.searchParams.set("select", "license_key,email,status,plan_code");
+  url.searchParams.set("email", `eq.${e}`);
+  url.searchParams.set("status", "eq.active");
+  url.searchParams.set("limit", "1");
+
+  const { status, json } = await requestJson("GET", url.toString(), { apikey: cfg.key, Authorization: `Bearer ${cfg.key}` });
+  if (status >= 200 && status < 300 && Array.isArray(json) && json[0] && json[0].license_key) return json[0];
+  return null;
+}
+
 async function updateLicenseBySubscriptionId(subscriptionId, patch) {
   const cfg = getSupabaseConfig();
   if (!cfg) throw new Error("DB not configured");
@@ -203,7 +313,9 @@ async function handleStripeWebhook(req, res) {
           ? obj.metadata.stripe_price_id.trim()
           : null;
 
-      const licenseKey = generateLicenseKey();
+      const existingBySession = checkoutSessionId ? await findLicenseByCheckoutSessionId(checkoutSessionId) : null;
+      const existingByEmail = email ? await findActiveLicenseByEmail(email) : null;
+      const licenseKey = existingBySession?.license_key || existingByEmail?.license_key || generateLicenseKey();
       await upsertLicense({
         license_key: licenseKey,
         email,
@@ -217,6 +329,11 @@ async function handleStripeWebhook(req, res) {
         stripe_payment_intent_id: paymentIntentId,
         stripe_price_id: stripePriceId,
       });
+
+      if (email) {
+        const reason = existingBySession?.license_key || existingByEmail?.license_key ? "resend" : "purchase";
+        await sendLicenseEmail({ to: email, licenseKey, planCode, reason });
+      }
 
       return res.status(200).json({ ok: true });
     }

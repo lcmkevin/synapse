@@ -7,6 +7,78 @@ function getStripeModeFromKey(apiKey) {
   return "unknown";
 }
 
+function getSupabaseConfig() {
+  const url = process.env.SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) return null;
+  return { url: url.replace(/\/+$/, ""), key };
+}
+
+function supabaseRequestJson({ method, urlString, apiKey, body }) {
+  return new Promise((resolve, reject) => {
+    const url = new URL(urlString);
+    const payload = body === undefined ? "" : JSON.stringify(body);
+    const reqDb = https.request(
+      {
+        protocol: url.protocol,
+        hostname: url.hostname,
+        port: url.port,
+        path: url.pathname + url.search,
+        method,
+        headers: {
+          Accept: "application/json",
+          apikey: apiKey,
+          Authorization: `Bearer ${apiKey}`,
+          ...(payload
+            ? {
+                "Content-Type": "application/json",
+                "Content-Length": Buffer.byteLength(payload),
+              }
+            : {}),
+        },
+      },
+      (dbRes) => {
+        let data = "";
+        dbRes.on("data", (chunk) => (data += chunk.toString()));
+        dbRes.on("end", () => {
+          const status = dbRes.statusCode || 0;
+          if (!data) return resolve({ status, json: null });
+          try {
+            resolve({ status, json: JSON.parse(data) });
+          } catch (e) {
+            reject(e);
+          }
+        });
+      }
+    );
+    reqDb.on("error", reject);
+    if (payload) reqDb.write(payload);
+    reqDb.end();
+  });
+}
+
+async function findActiveLicenseByEmail(email) {
+  const cfg = getSupabaseConfig();
+  if (!cfg) return null;
+  const e = String(email || "").trim().toLowerCase();
+  if (!e) return null;
+
+  const url = new URL(`${cfg.url}/rest/v1/licenses`);
+  url.searchParams.set("select", "license_key,email,status,plan_code");
+  url.searchParams.set("email", `eq.${e}`);
+  url.searchParams.set("status", "eq.active");
+  url.searchParams.set("limit", "1");
+
+  try {
+    const { status, json } = await supabaseRequestJson({ method: "GET", urlString: url.toString(), apiKey: cfg.key });
+    if (status >= 200 && status < 300 && Array.isArray(json) && json[0] && json[0].license_key) return json[0];
+  } catch {
+    void 0;
+  }
+
+  return null;
+}
+
 function readJsonBody(req) {
   return new Promise((resolve) => {
     if (req?.body && typeof req.body === "object") return resolve(req.body);
@@ -184,6 +256,17 @@ async function createCheckout(req, res) {
     const planDef = PLAN_REGISTRY[effectivePlanCode];
     if (!planDef) {
       return res.status(400).json({ ok: false, error: "Unknown plan", plan: effectivePlanCode });
+    }
+
+    if (customerEmail) {
+      const existing = await findActiveLicenseByEmail(customerEmail);
+      if (existing?.license_key) {
+        return res.status(409).json({
+          ok: false,
+          error: "License already exists for this email",
+          hint: "Use the resend page to retrieve your existing key.",
+        });
+      }
     }
 
     const priceId = await resolvePriceIdByPlan({ apiKey, planCode: effectivePlanCode });

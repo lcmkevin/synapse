@@ -56,7 +56,7 @@
             If you have a discount code, you can enter it on the Stripe page.
           </div>
 
-          <label class="muted" for="email" style="display: block; margin-bottom: 0.35rem">Email (optional)</label>
+          <label class="muted" for="email" style="display: block; margin-bottom: 0.35rem">Email</label>
           <input
             id="email"
             type="email"
@@ -97,6 +97,14 @@
         }
 
         const email = emailEl && typeof emailEl.value === "string" ? emailEl.value.trim() : "";
+        if (!email) {
+          setError("Email is required to receive your license key.");
+          if (payBtn) {
+            payBtn.disabled = false;
+            payBtn.textContent = "Pay $9 and get a Pro key →";
+          }
+          return;
+        }
 
         try {
           const resp = await fetch("/api/create-checkout", {
@@ -105,7 +113,7 @@
             body: JSON.stringify({
               plan: "pro_lifetime",
               customerEmail: email,
-              success_url: "https://labs-synapse.com/pro/success/",
+              success_url: "https://labs-synapse.com/pro/success/?session_id={CHECKOUT_SESSION_ID}",
               cancel_url: "https://labs-synapse.com/pro/checkout/",
             }),
           });
@@ -126,8 +134,16 @@
           }
 
           const stripeMsg = data && typeof data.stripeMessage === "string" ? data.stripeMessage : "";
-          const errMsg = stripeMsg || (data && typeof data.error === "string" ? data.error : "") || "Checkout failed.";
+          const hint = data && typeof data.hint === "string" ? data.hint : "";
+          const errMsg =
+            stripeMsg ||
+            (data && typeof data.error === "string" ? data.error : "") ||
+            (resp.status === 409 ? "License already exists for this email. Use the resend page to retrieve it." : "") ||
+            "Checkout failed.";
           setError(errMsg);
+          if (hint && errEl) {
+            errEl.textContent = `${errMsg} ${hint}`;
+          }
         } catch {
           setError("Checkout failed.");
         } finally {

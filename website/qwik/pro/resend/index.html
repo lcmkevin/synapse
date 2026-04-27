@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Resend License | Synapse Pro</title>
+    <meta name="description" content="Resend your Synapse Pro license key email." />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400;14..32,500;14..32,600;14..32,700;14..32,800&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="../../css/style.css" />
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧠</text></svg>" />
+  </head>
+  <body>
+    <nav class="navbar">
+      <div class="nav-container">
+        <a href="../../" class="logo"><span class="logo-icon">🧠</span><span>Synapse</span></a>
+        <div class="nav-links">
+          <a href="../../docs/">Docs</a>
+          <a href="../../downloads/adapters/">Adapters</a>
+          <a href="../" class="nav-pro">Pro <span class="nav-pill">$9</span></a>
+          <a href="https://github.com/lcmkevin/synapse" target="_blank">GitHub</a>
+        </div>
+      </div>
+    </nav>
+
+    <section class="section" style="padding-top: 140px">
+      <h1 class="section-title">Resend License Email</h1>
+      <p class="section-subtitle">Enter the email you used at checkout. If an active license exists, it will be sent.</p>
+
+      <div class="layout-two-col">
+        <div class="panel">
+          <h3>Email</h3>
+          <label class="muted" for="email" style="display: block; margin-bottom: 0.35rem">Email used at checkout</label>
+          <input
+            id="email"
+            type="email"
+            placeholder="you@company.com"
+            style="width: 100%; padding: 0.75rem 0.9rem; border-radius: 12px; border: 1px solid var(--gray); font-size: 1rem"
+          />
+
+          <button id="sendBtn" class="btn btn-primary btn-large" style="margin-top: 1rem; width: 100%; justify-content: center">
+            Send license email →
+          </button>
+
+          <div id="msg" class="note" style="margin-top: 1rem; display: none"></div>
+        </div>
+
+        <div class="panel">
+          <h3>Activation</h3>
+          <ol style="padding-left: 1.25rem; line-height: 1.8">
+            <li>Open your email and copy the license key.</li>
+            <li>Run <code>synapse enter-license</code> and paste your key.</li>
+            <li>Run <code>synapse adapters update --all</code>.</li>
+          </ol>
+        </div>
+      </div>
+    </section>
+
+    <script>
+      const sendBtn = document.getElementById("sendBtn");
+      const emailEl = document.getElementById("email");
+      const msgEl = document.getElementById("msg");
+
+      function setMsg(msg, kind) {
+        if (!msgEl) return;
+        if (!msg) {
+          msgEl.style.display = "none";
+          msgEl.textContent = "";
+          return;
+        }
+        msgEl.style.display = "block";
+        msgEl.textContent = msg;
+        if (kind === "error") {
+          msgEl.style.borderColor = "rgba(239, 68, 68, 0.25)";
+          msgEl.style.background = "rgba(239, 68, 68, 0.06)";
+        } else {
+          msgEl.style.borderColor = "rgba(34, 197, 94, 0.25)";
+          msgEl.style.background = "rgba(34, 197, 94, 0.06)";
+        }
+      }
+
+      async function resend() {
+        setMsg("", "");
+        const email = emailEl && typeof emailEl.value === "string" ? emailEl.value.trim() : "";
+        if (!email) {
+          setMsg("Email is required.", "error");
+          return;
+        }
+
+        if (sendBtn) {
+          sendBtn.disabled = true;
+          sendBtn.textContent = "Sending…";
+        }
+
+        try {
+          const resp = await fetch("/api/resend-license", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ email }),
+          });
+          if (resp.status === 200) {
+            setMsg("If an active license exists for this email, it has been sent.", "ok");
+            return;
+          }
+          const text = await resp.text();
+          const data = (() => {
+            try {
+              return text ? JSON.parse(text) : null;
+            } catch {
+              return null;
+            }
+          })();
+          const errMsg = (data && typeof data.error === "string" && data.error) || "Request failed.";
+          setMsg(errMsg, "error");
+        } catch {
+          setMsg("Request failed.", "error");
+        } finally {
+          if (sendBtn) {
+            sendBtn.disabled = false;
+            sendBtn.textContent = "Send license email →";
+          }
+        }
+      }
+
+      if (sendBtn) sendBtn.addEventListener("click", () => void resend());
+    </script>
+    <script src="../../js/main.js"></script>
+  </body>
+</html>

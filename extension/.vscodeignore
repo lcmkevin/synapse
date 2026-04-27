@@ -1,5 +1,6 @@
 node_modules/.bin
 node_modules/@types
+node_modules/synapse-cli
 .gitignore
 *.ts
 tsconfig.json

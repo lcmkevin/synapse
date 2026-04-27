@@ -84,6 +84,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p dist
+          rm -rf extension/node_modules/synapse-cli || true
           cd extension
           npx @vscode/vsce@2.26.0 package --out ../dist/synapse.vsix
 

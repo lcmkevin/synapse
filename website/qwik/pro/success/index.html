@@ -24,11 +24,19 @@
 
     <section class="section" style="padding-top: 140px">
       <h1 class="section-title">Payment Successful!</h1>
-      <p class="section-subtitle">Your Synapse Pro license key has been sent to your email.</p>
+      <p class="section-subtitle">Your Synapse Pro license key is ready. If email delivery fails, you can retrieve it here.</p>
 
       <div class="layout-two-col">
         <div class="panel">
           <h3>Activate your Pro key</h3>
+          <div id="keyBox" class="note" style="margin-top: 1rem; display: none">
+            <div class="muted" style="margin-bottom: 0.35rem">License key</div>
+            <code id="licenseKey" style="display: block; padding: 0.65rem 0.75rem; border-radius: 12px; border: 1px solid var(--gray); overflow-wrap: anywhere"></code>
+            <div class="hero-buttons" style="justify-content: flex-start; margin-top: 0.75rem">
+              <button id="copyBtn" class="btn btn-primary">Copy key</button>
+            </div>
+          </div>
+          <div id="keyMsg" class="note" style="margin-top: 1rem; display: none"></div>
           <ol style="padding-left: 1.25rem; line-height: 1.8">
             <li>Check your email for the license key.</li>
             <li>Run <code>synapse enter-license</code> and paste your key.</li>
@@ -41,6 +49,9 @@
               <code>synapse adapters versions cursor</code><br />
               <code>synapse adapters rollback cursor 1.1.0</code>
             </div>
+          </div>
+          <div class="hero-buttons" style="justify-content: flex-start; margin-top: 1rem">
+            <a class="btn btn-outline" href="../resend/">Resend license email</a>
           </div>
         </div>
 
@@ -72,6 +83,77 @@
       </div>
       <div class="footer-bottom"><p>© 2026 Labs Synapse</p></div>
     </footer>
+    <script>
+      const keyBox = document.getElementById("keyBox");
+      const keyEl = document.getElementById("licenseKey");
+      const copyBtn = document.getElementById("copyBtn");
+      const keyMsg = document.getElementById("keyMsg");
+
+      function setKeyMsg(msg, kind) {
+        if (!keyMsg) return;
+        if (!msg) {
+          keyMsg.style.display = "none";
+          keyMsg.textContent = "";
+          return;
+        }
+        keyMsg.style.display = "block";
+        keyMsg.textContent = msg;
+        if (kind === "error") {
+          keyMsg.style.borderColor = "rgba(239, 68, 68, 0.25)";
+          keyMsg.style.background = "rgba(239, 68, 68, 0.06)";
+        } else {
+          keyMsg.style.borderColor = "rgba(59, 130, 246, 0.25)";
+          keyMsg.style.background = "rgba(59, 130, 246, 0.06)";
+        }
+      }
+
+      async function fetchKey(sessionId) {
+        try {
+          const resp = await fetch(`/api/license-by-session?session_id=${encodeURIComponent(sessionId)}`);
+          if (resp.status !== 200) return null;
+          const data = await resp.json();
+          const licenseKey = data && typeof data.licenseKey === "string" ? data.licenseKey : "";
+          return licenseKey || null;
+        } catch {
+          return null;
+        }
+      }
+
+      async function initKey() {
+        const url = new URL(window.location.href);
+        const sessionId = url.searchParams.get("session_id") || "";
+        if (!sessionId) return;
+
+        setKeyMsg("Generating your license…", "info");
+        let tries = 0;
+        while (tries < 10) {
+          const key = await fetchKey(sessionId);
+          if (key) {
+            if (keyEl) keyEl.textContent = key;
+            if (keyBox) keyBox.style.display = "block";
+            setKeyMsg("", "");
+            if (copyBtn) {
+              copyBtn.addEventListener("click", async () => {
+                try {
+                  await navigator.clipboard.writeText(key);
+                  setKeyMsg("Copied.", "info");
+                  setTimeout(() => setKeyMsg("", ""), 1500);
+                } catch {
+                  setKeyMsg("Copy failed. Please select and copy manually.", "error");
+                }
+              });
+            }
+            return;
+          }
+          tries += 1;
+          await new Promise((r) => setTimeout(r, 1200));
+        }
+
+        setKeyMsg("License generation is taking longer than expected. Use “Resend license email” or refresh this page.", "error");
+      }
+
+      void initKey();
+    </script>
     <script src="../../js/main.js"></script>
   </body>
 </html>
