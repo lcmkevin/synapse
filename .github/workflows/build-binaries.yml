@@ -20,7 +20,8 @@ jobs:
         with:
           node-version: "18"
 
-      - run: npm install
+      - name: Install deps (skip scripts)
+        run: npm install --ignore-scripts
 
       - name: Prepare dist/
         run: node -e "require('fs').mkdirSync('dist', { recursive: true })"
@@ -74,7 +75,8 @@ jobs:
         with:
           node-version: "18"
 
-      - run: npm --prefix extension install
+      - name: Install extension deps (skip scripts)
+        run: npm --prefix extension install --ignore-scripts
       - run: npm --prefix extension run compile
 
       - name: Build VSIX
