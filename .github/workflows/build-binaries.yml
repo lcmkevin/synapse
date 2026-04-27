@@ -24,7 +24,7 @@ jobs:
         run: npm install --ignore-scripts
 
       - name: Prepare dist/
-        run: node -e "require('fs').mkdirSync('dist', { recursive: true })"
+        run: node -e "require('fs').mkdirSync('dist',{recursive:true})"
 
       - name: Build binaries (Windows)
         if: runner.os == 'Windows'
@@ -84,7 +84,8 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p dist
-          npx --prefix extension @vscode/vsce@2.26.0 package --out ../dist/synapse.vsix
+          cd extension
+          npx @vscode/vsce@2.26.0 package --out ../dist/synapse.vsix
 
       - uses: actions/upload-artifact@v4
         with:
