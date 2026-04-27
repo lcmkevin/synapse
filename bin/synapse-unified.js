@@ -411,7 +411,7 @@ async function startNodeProcess(label, args, env) {
 program
   .name("synapse")
   .description("Universal rule orchestration: portable rules across IDEs with safe sync, rollback, cost analysis, and zero lock-in")
-  .version("0.1.0");
+  .version(require(path.resolve(__dirname, "..", "package.json")).version);
 
 program
   .command("init")
