@@ -14,36 +14,43 @@
           <a href="./index.html#features">Features</a>
           <a href="./pricing.html">Pricing</a>
           <a href="./docs/index.html">Docs</a>
+          <a href="./downloads/adapters/">Adapters</a>
+          <a href="./pro/" class="nav-pro">Pro <span class="nav-pill">$9</span></a>
           <a href="https://github.com/lcmkevin/synapse" target="_blank">GitHub</a>
         </div>
-        <a class="btn btn-primary" href="./docs/index.html#pro">Upgrade</a>
+        <a class="btn btn-primary" href="./pro/checkout/">Buy Pro - $9</a>
       </div>
     </nav>
 
     <section class="section" style="padding-top:140px">
       <h2 class="section-title">Simple, Transparent Pricing</h2>
-      <p class="section-subtitle">Start free. Upgrade when you need unlimited targets, skill conversion, and one-click optimization.</p>
+      <p class="section-subtitle">One-time payment for Pro. No recurring fees. Enterprise later.</p>
       <div class="pricing-grid">
         <div class="pricing-card">
           <h3>Free</h3>
-          <div class="price">$0 <span>/mo</span></div>
+          <div class="price">$0 <span>forever</span></div>
           <ul class="pricing-features">
-            <li>✅ Token analysis</li>
-            <li>✅ Cost dashboard</li>
-            <li>✅ 2 IDE targets</li>
-            <li>✅ Local optimization (analysis)</li>
+            <li>✅ 5 IDE adapters (Cursor, Trae, Windsurf, Cline, Zed)</li>
+            <li>✅ Rule compilation &amp; sync</li>
+            <li>✅ Token analysis + cost dashboard</li>
+            <li>✅ Manual adapter downloads</li>
+            <li>❌ No adapter versions/rollback</li>
+            <li>❌ No auto-updates</li>
           </ul>
-          <a class="btn btn-outline" href="./index.html#install">Get started</a>
+          <a class="btn btn-outline" href="./downloads/adapters/">Download adapters</a>
         </div>
         <div class="pricing-card pro">
-          <div class="popular-badge">Most Popular</div>
+          <div class="popular-badge">Best Value</div>
           <h3>Pro</h3>
-          <div class="price">$9 <span>/mo</span></div>
+          <div class="price">$9 <span>one-time</span></div>
+          <div class="price-caption">One-time payment • No recurring fees</div>
           <ul class="pricing-features">
+            <li>✅ Everything in Free</li>
+            <li>✅ One-click adapter updates</li>
+            <li>✅ Background updates during sync</li>
+            <li>✅ Adapter versions + rollback</li>
+            <li>✅ Priority new IDE support</li>
             <li>✅ Unlimited IDE targets</li>
-            <li>✅ Convert large rules to skills</li>
-            <li>✅ Optimize auto-fix (CLI + VS Code)</li>
-            <li>✅ Pro license gate</li>
           </ul>
           <button class="btn btn-primary" id="proCheckoutBtn">Checkout → Get Pro key</button>
         </div>
@@ -75,8 +82,10 @@
               <tr><td>Local optimization (analyze)</td><td class="check">✅</td><td class="check">✅</td><td class="check">✅</td></tr>
               <tr><td>Local optimization (auto-fix)</td><td class="cross">❌</td><td class="check">✅</td><td class="check">✅</td></tr>
               <tr><td>Local backups + restore</td><td class="check">✅</td><td class="check">✅</td><td class="check">✅</td></tr>
-              <tr><td>IDE targets</td><td>2</td><td>Unlimited</td><td>Unlimited</td></tr>
+              <tr><td>Built-in IDE adapters</td><td>5</td><td>5 + priority new IDEs</td><td>5 + priority new IDEs</td></tr>
               <tr><td>Convert large rules to skills</td><td class="cross">❌</td><td class="check">✅</td><td class="check">✅</td></tr>
+              <tr><td>IDE adapter auto-update</td><td>Manual download</td><td class="check">✅</td><td class="check">✅</td></tr>
+              <tr><td>Adapter versions + rollback</td><td class="cross">❌</td><td class="check">✅</td><td class="check">✅</td></tr>
               <tr><td>Org policy controls</td><td class="cross">❌</td><td class="cross">❌</td><td class="check">✅</td></tr>
               <tr><td>SSO / SCIM</td><td class="cross">❌</td><td class="cross">❌</td><td class="check">✅</td></tr>
               <tr><td>Audit logs</td><td class="cross">❌</td><td class="cross">❌</td><td class="check">✅</td></tr>
@@ -107,7 +116,12 @@
           const resp = await fetch("/api/create-checkout", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ customerEmail: email }),
+            body: JSON.stringify({
+              plan: "pro_lifetime",
+              customerEmail: email,
+              success_url: "https://labs-synapse.com/pro/success/",
+              cancel_url: "https://labs-synapse.com/pro/checkout/",
+            }),
           });
           const text = await resp.text();
           const data = (() => {
@@ -125,7 +139,7 @@
             alert(String(data.stripeMessage || data.error));
           }
         } catch {}
-        window.location.href = "./docs/index.html#pro";
+        window.location.href = "./pro/checkout/";
       }
       const btn = document.getElementById("proCheckoutBtn");
       if (btn) btn.addEventListener("click", () => void startProCheckout());

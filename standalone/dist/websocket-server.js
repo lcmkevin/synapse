@@ -125,12 +125,12 @@ async function runSync(workspace, target, minify) {
         return { outputs: [], skipped: [] };
     const outputs = [];
     const skipped = [];
-    const targets = target === "all" ? ["trae", "cursor"] : [target];
+    const supportedTargets = ["trae", "cursor"];
+    if (target !== "all" && !supportedTargets.includes(target)) {
+        throw new Error(`Unsupported target "${target}". Supported: ${supportedTargets.join(", ")}`);
+    }
+    const targets = target === "all" ? supportedTargets : [target];
     for (const t of targets) {
-        if (t !== "trae" && t !== "cursor") {
-            skipped.push(`${t}: not implemented`);
-            continue;
-        }
         const outDir = t === "trae" ? path.join(workspace, ".trae") : path.join(workspace, ".cursor", "rules");
         await fs.mkdir(outDir, { recursive: true });
         for (const file of files) {

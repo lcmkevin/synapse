@@ -2,7 +2,12 @@ const crypto = require("crypto");
 const http = require("http");
 const https = require("https");
 
-const ONE_YEAR_MS = 365 * 24 * 60 * 60 * 1000;
+function getLicenseKeyMaxAgeMs() {
+  const raw = process.env.LICENSE_KEY_MAX_AGE_DAYS;
+  const days = raw ? Number(raw) : NaN;
+  if (!Number.isFinite(days) || days <= 0) return 0;
+  return Math.floor(days * 24 * 60 * 60 * 1000);
+}
 
 function readJsonBody(req) {
   return new Promise((resolve) => {
@@ -39,8 +44,11 @@ function parseKey(licenseKey) {
   const [, timestampBase36, signatureHex] = match;
   const tsSeconds = parseInt(timestampBase36, 36);
   if (!Number.isFinite(tsSeconds) || tsSeconds <= 0) return { valid: false, reason: "Invalid timestamp" };
-  const issuedAtMs = tsSeconds * 1000;
-  if (Date.now() - issuedAtMs > ONE_YEAR_MS) return { valid: false, reason: "License expired" };
+  const maxAgeMs = getLicenseKeyMaxAgeMs();
+  if (maxAgeMs > 0) {
+    const issuedAtMs = tsSeconds * 1000;
+    if (Date.now() - issuedAtMs > maxAgeMs) return { valid: false, reason: "License expired" };
+  }
   return { valid: true, timestampBase36, signatureHex };
 }
 

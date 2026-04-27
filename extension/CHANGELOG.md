@@ -1,5 +1,17 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+
+- `synapse.proPriceLabel` and `synapse.proTermsLabel` settings to avoid hard-coded pricing copy.
+- Cleanup/Uninstall flow to remove local Synapse data (home dir, workspace, extension storage).
+
+### Changed
+
+- Pro checkout requests now send `plan: "pro_lifetime"` (no client Stripe Price IDs).
+- Pro messaging updated to “one-time payment • no recurring fees”.
+
 ## [0.1.1] - 2026-04-21
 
 ### Added

@@ -408,7 +408,10 @@ async function startNodeProcess(label, args, env) {
   return child;
 }
 
-program.name("synapse").description("Synapse - Universal rule orchestration for all IDEs").version("0.1.0");
+program
+  .name("synapse")
+  .description("Universal rule orchestration: portable rules across IDEs with safe sync, rollback, cost analysis, and zero lock-in")
+  .version("0.1.0");
 
 program
   .command("init")
@@ -458,15 +461,30 @@ Always write clean, documented code
 
 program
   .command("sync")
-  .description("Compile rules to target IDEs")
+  .description("Sync rules to IDEs (optional backup for rollback)")
   .option("-t, --target <ide>", "Target IDE (trae, cursor, windsurf, cline, zed)")
   .option("-a, --all", "Sync to all enabled IDEs")
   .option("--rules <ids>", "Comma-separated rule ids (.synapse basenames) to sync")
   .option("--minify", "Remove leading/trailing whitespace from output")
   .option("--conflict <mode>", "Conflict handling: overwrite, skip, prompt")
+  .option("--backup", "Create a local backup before writing outputs (for rollback)")
   .option("--dry-run", "Print what would change without writing files")
   .option("--list-changes", "Print per-file changes (with color in TTYs)")
   .option("-w, --watch", "Watch mode (auto-sync on changes)")
+  .addHelpText(
+    "after",
+    `
+Examples:
+  $ synapse sync --all --conflict prompt
+  $ synapse sync --target cursor
+  $ synapse sync --all --backup
+
+Rollback:
+  $ synapse backup list
+  $ synapse rollback --backup <name>
+  $ synapse backup restore --backup <name>
+`
+  )
   .action(async (options) => {
     await ensureInitialized();
 
@@ -501,6 +519,47 @@ program
           : ["trae", "cursor"];
     process.stdout.write(`🔄 Syncing ${ruleFiles.length} rule(s) to: ${targets.join(", ")}\n`);
 
+    const postSyncLines = [];
+    let syncFinished = false;
+    const emitPostSync = (line) => {
+      const s = String(line || "");
+      if (!s) return;
+      if (syncFinished) process.stdout.write(s);
+      else postSyncLines.push(s);
+    };
+
+    const supportedAdapterTargets = new Set(["cursor", "trae", "windsurf", "cline", "zed"]);
+    const adapterTargets = targets.map((t) => String(t || "").trim()).filter((t) => supportedAdapterTargets.has(t));
+    const adapterUpdateBg = (async () => {
+      if (adapterTargets.length === 0) return [];
+      const { updateAdapterIfNeeded, checkAdapterTipIfNeeded } = require(path.resolve(__dirname, "..", "src", "commands", "adapters-update.js"));
+
+      const results = [];
+      for (const ideId of adapterTargets) {
+        const res = await updateAdapterIfNeeded({ ideId, quiet: true });
+        if (res && typeof res.status === "string") results.push(res);
+        else {
+          const tip = await checkAdapterTipIfNeeded({ ideId, quiet: true });
+          if (tip && typeof tip.status === "string") results.push(tip);
+        }
+      }
+      return results;
+    })();
+
+    adapterUpdateBg
+      .then((results) => {
+        if (!Array.isArray(results) || results.length === 0) return;
+        for (const r of results) {
+          if (!r || typeof r.ideId !== "string") continue;
+          if (r.status === "updated") {
+            emitPostSync(`✅ Auto-updated ${r.ideId} adapter (v${r.fromVersion} → v${r.toVersion})\n`);
+          } else if (r.status === "manual_available") {
+            emitPostSync(`Tip: New ${r.ideId} adapter available. Run: synapse adapters update ${r.ideId}\n`);
+          }
+        }
+      })
+      .catch(() => void 0);
+
     const selectedRuleIds = String(options.rules || "")
       .split(",")
       .map((s) => s.trim())
@@ -513,6 +572,13 @@ program
     const dryRun = !!options.dryRun;
     const listChanges = !!options.listChanges;
     const colors = makeColorFns(process.stdout.isTTY);
+
+    if (!!options.backup && !dryRun) {
+      const { BackupManager } = require(path.resolve(__dirname, "..", "src", "backup.js"));
+      const backupManager = new BackupManager();
+      const backupPath = await backupManager.createBackup(process.cwd());
+      process.stdout.write(`📦 Backup saved to: ${backupPath}\n\n`);
+    }
 
     const state = { overwriteAll: false, skipAll: false };
     const totals = { created: 0, updated: 0, unchanged: 0, skipped: 0 };
@@ -545,6 +611,9 @@ program
       );
     }
 
+    syncFinished = true;
+    for (const line of postSyncLines) process.stdout.write(line);
+
     if (options.watch) {
       if (dryRun) {
         process.stdout.write("⚠️ --dry-run is not supported in --watch mode\n");
@@ -575,9 +644,25 @@ program
 
 program
   .command("analyze")
-  .description("Analyze rule size and token footprint (heuristic)")
+  .description("Analyze token costs and get optimization suggestions (local-only)")
   .option("--top <n>", "Show top N largest rules", "10")
   .option("--threshold <tokens>", "Flag rules above this estimated token count", "2000")
+  .option(
+    "--usd-per-1m <usd>",
+    "Cost estimate per 1,000,000 tokens (USD). Set SYNAPSE_USD_PER_1M_TOKENS to change default.",
+    process.env.SYNAPSE_USD_PER_1M_TOKENS || "10"
+  )
+  .addHelpText(
+    "after",
+    `
+Example output:
+  Total tokens: 15,234 | Estimated cost: $0.152/session
+  💡 Recommendation: Convert a large always-on rule to a skill (reduce token spend)
+
+Pro users:
+  $ synapse optimize --apply --backup
+`
+  )
   .action(async (options) => {
     await ensureInitialized();
 
@@ -589,12 +674,16 @@ program
       return;
     }
 
+    const { LocalOptimizer } = require(path.resolve(__dirname, "..", "src", "optimizer.js"));
+    const optimizer = new LocalOptimizer();
     const rows = [];
+    let totalTokens = 0;
     for (const file of ruleFiles) {
       const p = path.join(rp, file);
       const content = await fs.readFile(p, "utf8");
       const chars = content.length;
-      const estTokens = Math.ceil(chars / 4);
+      const estTokens = optimizer.countTokens(content);
+      totalTokens += estTokens;
       rows.push({
         id: path.basename(file, ".synapse"),
         file,
@@ -607,8 +696,12 @@ program
     const topN = Math.max(1, parseInt(String(options.top || "10"), 10) || 10);
     const threshold = Math.max(1, parseInt(String(options.threshold || "2000"), 10) || 2000);
     const flagged = rows.filter((r) => r.estTokens >= threshold);
+    const usdPer1M = Math.max(0, Number.parseFloat(String(options.usdPer1m || "10")) || 0);
+    const estCost = usdPer1M > 0 ? (totalTokens / 1_000_000) * usdPer1M : 0;
 
     process.stdout.write(`🧮 Rules analyzed: ${rows.length}\n`);
+    process.stdout.write(`🧠 Total tokens (est): ${totalTokens.toLocaleString()}\n`);
+    if (usdPer1M > 0) process.stdout.write(`💵 Estimated cost: $${estCost.toFixed(3)}/session (USD per 1M: $${usdPer1M})\n`);
     process.stdout.write(`🚩 Flagged (>= ${threshold} est tokens): ${flagged.length}\n\n`);
 
     const out = rows.slice(0, topN).map((r) => ({
@@ -622,9 +715,277 @@ program
     if (flagged.length > 0) {
       process.stdout.write("\nTips:\n");
       process.stdout.write("  - Keep always-on rules short; move long examples into skills.\n");
-      process.stdout.write("  - Use VS Code: Synapse: Analyze Tokens (and Convert Large Rules to Skills) for deeper analysis.\n");
+      process.stdout.write("  - Run: synapse optimize (detect conflicts + get suggestions).\n");
       process.stdout.write("  - Use: synapse sync --minify to reduce whitespace in generated outputs.\n");
     }
+  });
+
+program
+  .command("mcp")
+  .description("Start MCP server (stdio) for AI agents (Cursor/Windsurf/etc.)")
+  .action(async () => {
+    await ensureInitialized();
+    const standaloneRoot = path.resolve(__dirname, "..", "standalone");
+    const mcpPath = path.join(standaloneRoot, "dist", "mcp-server.js");
+    process.stdout.write("🚀 Starting MCP server...\n");
+    if (!(await fs.pathExists(mcpPath))) {
+      process.stdout.write("⚠️ MCP server not built. Run: (cd standalone && npm run build)\n");
+      process.exitCode = 1;
+      return;
+    }
+    await startNodeProcess("mcp", [mcpPath]);
+  });
+
+program
+  .command("importFromIDE")
+  .alias("import-from-ide")
+  .description("Import existing IDE rules into .synapse/rules (zero lock-in)")
+  .option("--dry-run", "Show what would be imported without writing files")
+  .option("--conflict <mode>", "Conflict handling for existing .synapse files: overwrite, skip, prompt", "prompt")
+  .action(async (options) => {
+    await ensureInitialized();
+
+    const dryRun = !!options.dryRun;
+    const conflictModeRaw = typeof options.conflict === "string" ? options.conflict.trim() : "prompt";
+    const conflictMode = ["overwrite", "skip", "prompt"].includes(conflictModeRaw) ? conflictModeRaw : "prompt";
+
+    const root = process.cwd();
+    const outDir = rulesDir();
+    await fs.ensureDir(outDir);
+
+    const readIfExists = async (p) => {
+      try {
+        if (!(await fs.pathExists(p))) return null;
+        return await fs.readFile(p, "utf8");
+      } catch {
+        return null;
+      }
+    };
+
+    const suggestName = (base) => {
+      const safe = String(base || "")
+        .trim()
+        .replace(/[<>:"/\\|?*\x00-\x1F]/g, "-")
+        .replace(/\s+/g, "-")
+        .replace(/-+/g, "-")
+        .replace(/^\.+/, "")
+        .replace(/\.+$/, "")
+        .toLowerCase();
+      return `${safe || "imported"}.synapse`;
+    };
+
+    const parseMdRule = (content, filePath) => {
+      const lines = String(content || "").split(/\r?\n/);
+      const base = path.basename(filePath, path.extname(filePath));
+      let name = base;
+      const nameMatch = String(content || "").match(/^#\s+(.+)$/m);
+      if (nameMatch) name = nameMatch[1].trim();
+
+      let description = "";
+      let mainContent = "";
+      const constraints = [];
+      const skills = [];
+
+      let inConstraints = false;
+      let inSkills = false;
+      let inDescription = true;
+      const descriptionLines = [];
+      const bodyLines = [];
+
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        if (i === 0 && line.startsWith("# ")) continue;
+
+        if (line.trim() === "## Constraints") {
+          inConstraints = true;
+          inSkills = false;
+          inDescription = false;
+          continue;
+        }
+        if (line.trim() === "## Skills") {
+          inConstraints = false;
+          inSkills = true;
+          inDescription = false;
+          continue;
+        }
+
+        if (inConstraints) {
+          if (line.trim().startsWith("-")) {
+            const c = line.trim().slice(1).trim();
+            if (c) constraints.push(c);
+            continue;
+          }
+          if (line.trim() !== "") inConstraints = false;
+          if (inConstraints) continue;
+        }
+
+        if (inSkills) {
+          if (line.trim().startsWith("-")) {
+            const s = line.trim().slice(1).trim();
+            if (s) skills.push(s);
+            continue;
+          }
+          if (line.trim() !== "") inSkills = false;
+          if (inSkills) continue;
+        }
+
+        if (inDescription) {
+          if (line.trim() === "") {
+            if (descriptionLines.length > 0) inDescription = false;
+            else continue;
+          } else {
+            descriptionLines.push(line);
+            continue;
+          }
+        }
+
+        bodyLines.push(line);
+      }
+
+      description = descriptionLines.join("\n").trim();
+      mainContent = bodyLines.join("\n").trim();
+
+      return { name, description: description || undefined, content: mainContent || "", constraints, skills };
+    };
+
+    const parseCursorMdc = (content, filePath) => {
+      const base = path.basename(filePath, path.extname(filePath));
+      const fm = String(content || "").match(/^---\n([\s\S]*?)\n---/);
+      const frontmatter = {};
+      if (fm) {
+        for (const line of fm[1].split("\n")) {
+          const [key, ...value] = line.split(":");
+          if (key && value.length) frontmatter[key.trim()] = value.join(":").trim();
+        }
+      }
+      const cleanContent = String(content || "").replace(/^---\n[\s\S]*?\n---/, "").trim();
+      const name = typeof frontmatter.description === "string" && frontmatter.description.trim() ? frontmatter.description.trim() : base;
+      const globsRaw = typeof frontmatter.globs === "string" ? frontmatter.globs : "";
+      const constraints = globsRaw
+        ? globsRaw
+            .split(",")
+            .map((g) => g.trim())
+            .filter(Boolean)
+        : [];
+      return { name, description: typeof frontmatter.description === "string" ? frontmatter.description : undefined, content: cleanContent, constraints, skills: [] };
+    };
+
+    const parseWindsurf = (content, filePath) => {
+      const base = path.basename(filePath, path.extname(filePath));
+      try {
+        const json = JSON.parse(String(content || ""));
+        const name = typeof json.name === "string" && json.name.trim() ? json.name.trim() : base;
+        const description = typeof json.description === "string" ? json.description : undefined;
+        const body = typeof json.content === "string" ? json.content : "";
+        const constraints = Array.isArray(json.constraints) ? json.constraints.map((c) => String(c)).filter(Boolean) : [];
+        const skills = Array.isArray(json.skills) ? json.skills.map((s) => String(s)).filter(Boolean) : [];
+        return { name, description, content: body, constraints, skills };
+      } catch {
+        return { name: base, description: "Imported from Windsurf", content: String(content || ""), constraints: [], skills: [] };
+      }
+    };
+
+    const formatSynapse = ({ name, description, content, constraints, skills }) => {
+      const lines = [];
+      lines.push(`# Rule: ${String(name || "Imported Rule").trim()}`);
+      if (description) lines.push(`# Description: ${String(description).trim()}`);
+      lines.push("");
+      lines.push(String(content || "").trimEnd());
+      lines.push("");
+      if (constraints && constraints.length) {
+        lines.push("# Constraints:");
+        for (const c of constraints) lines.push(`# @constraint ${String(c).trim()}`);
+        lines.push("");
+      }
+      if (skills && skills.length) {
+        lines.push("# Skills:");
+        for (const s of skills) lines.push(`# @skill ${String(s).trim()}`);
+        lines.push("");
+      }
+      return lines.join("\n").trimEnd() + "\n";
+    };
+
+    const detected = [];
+
+    const scanDir = async (dir, exts) => {
+      if (!(await fs.pathExists(dir))) return;
+      const entries = await fs.readdir(dir).catch(() => []);
+      for (const e of entries) {
+        const full = path.join(dir, e);
+        const stat = await fs.stat(full).catch(() => null);
+        if (!stat || !stat.isFile()) continue;
+        const ext = path.extname(e).toLowerCase();
+        if (!exts.includes(ext)) continue;
+        detected.push(full);
+      }
+    };
+
+    await scanDir(path.join(root, ".trae", "rules"), [".md"]);
+    await scanDir(path.join(root, ".cursor", "rules"), [".mdc"]);
+    await scanDir(path.join(root, ".windsurf"), [".windsurfrules"]);
+    await scanDir(path.join(root, ".clinerules"), [".md"]);
+
+    if (detected.length === 0) {
+      process.stdout.write("📥 No IDE rule files found to import in this workspace\n");
+      return;
+    }
+
+    let created = 0;
+    let skipped = 0;
+    let overwritten = 0;
+
+    process.stdout.write(`📥 Found ${detected.length} rule file(s). Importing to .synapse/rules/\n\n`);
+
+    for (const filePath of detected) {
+      const content = await readIfExists(filePath);
+      if (content === null) continue;
+      const ext = path.extname(filePath).toLowerCase();
+      const base = path.basename(filePath, ext);
+      const ide =
+        filePath.includes(`${path.sep}.cursor${path.sep}`) ? "cursor" : filePath.includes(`${path.sep}.windsurf${path.sep}`) ? "windsurf" : filePath.includes(`${path.sep}.clinerules${path.sep}`) ? "cline" : "trae";
+
+      let parsed;
+      if (ide === "cursor") parsed = parseCursorMdc(content, filePath);
+      else if (ide === "windsurf") parsed = parseWindsurf(content, filePath);
+      else parsed = parseMdRule(content, filePath);
+
+      if (!parsed.description) parsed.description = `Imported from ${ide}`;
+
+      const outName = suggestName(parsed.name || base);
+      const outPath = path.join(outDir, outName);
+      const exists = await fs.pathExists(outPath);
+
+      if (exists) {
+        if (conflictMode === "skip") {
+          skipped++;
+          process.stdout.write(`↩️ Skipped (exists): ${outName}\n`);
+          continue;
+        }
+        if (conflictMode === "prompt") {
+          if (!process.stdin.isTTY || !process.stdout.isTTY) {
+            skipped++;
+            process.stdout.write(`↩️ Skipped (no TTY to prompt): ${outName}\n`);
+            continue;
+          }
+          const ans = await promptConflict(`Overwrite existing ${outName}? (y/N) `);
+          if (!["y", "yes"].includes(ans)) {
+            skipped++;
+            process.stdout.write(`↩️ Skipped: ${outName}\n`);
+            continue;
+          }
+        }
+      }
+
+      const next = formatSynapse(parsed);
+      if (!dryRun) await fs.writeFile(outPath, next, "utf8");
+
+      if (exists) overwritten++;
+      else created++;
+      process.stdout.write(`${dryRun ? "🧪 Would import" : "✅ Imported"}: ${outName}\n`);
+    }
+
+    process.stdout.write(`\n✅ Import complete (created: ${created}, overwritten: ${overwritten}, skipped: ${skipped})\n`);
+    process.stdout.write("Next: synapse sync --all --conflict prompt\n");
   });
 
 function isProEnabledForCli() {
@@ -772,6 +1133,223 @@ program
     process.exitCode = 1;
   });
 
+const adaptersCmd = program.command("adapters").description("Manage IDE adapters");
+
+adaptersCmd
+  .command("list")
+  .description("List adapters with update status")
+  .action(async () => {
+    const { runAdaptersList } = require(path.resolve(__dirname, "..", "src", "commands", "adapters-list.js"));
+    await runAdaptersList();
+  });
+
+adaptersCmd
+  .command("update")
+  .description("Update adapters (Pro: auto-update; Free: manual instructions)")
+  .argument("[ide]", "IDE id (cursor, trae, windsurf, cline, zed)")
+  .option("--all", "Update all supported IDE adapters")
+  .action(async (ide, options) => {
+    const { runAdaptersUpdate } = require(path.resolve(__dirname, "..", "src", "commands", "adapters-update.js"));
+    await runAdaptersUpdate({ ideId: typeof ide === "string" ? ide.trim() : "", all: !!options.all });
+  });
+
+adaptersCmd
+  .command("versions")
+  .description("List available adapter versions (Pro only)")
+  .argument("<ide>", "IDE id (cursor, trae, windsurf, cline, zed)")
+  .action(async (ide) => {
+    const { runAdaptersVersions } = require(path.resolve(__dirname, "..", "src", "commands", "adapters-versions.js"));
+    await runAdaptersVersions({ ideId: typeof ide === "string" ? ide.trim() : "" });
+  });
+
+adaptersCmd
+  .command("rollback")
+  .description("Rollback adapter to a specific version (Pro only)")
+  .argument("<ide>", "IDE id (cursor, trae, windsurf, cline, zed)")
+  .argument("<version>", "Version (example: 1.1.0)")
+  .action(async (ide, version) => {
+    const { runAdaptersRollback } = require(path.resolve(__dirname, "..", "src", "commands", "adapters-rollback.js"));
+    await runAdaptersRollback({ ideId: typeof ide === "string" ? ide.trim() : "", version: typeof version === "string" ? version.trim() : "" });
+  });
+
+function backupRootDir() {
+  return path.join(require("os").homedir(), ".synapse", "backups");
+}
+
+function firstDiffLine(aText, bText) {
+  const a = String(aText || "").replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n");
+  const b = String(bText || "").replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n");
+  const n = Math.max(a.length, b.length);
+  for (let i = 0; i < n; i++) {
+    const av = typeof a[i] === "string" ? a[i] : "";
+    const bv = typeof b[i] === "string" ? b[i] : "";
+    if (av !== bv) return { line: i + 1, a: av, b: bv };
+  }
+  return null;
+}
+
+function clipLine(line, max = 160) {
+  const s = String(line || "");
+  if (s.length <= max) return s;
+  return s.slice(0, max - 1) + "…";
+}
+
+program
+  .command("diff")
+  .description("Compare current rules with a backup snapshot")
+  .option("--backup <name>", "Backup folder name (default: latest)")
+  .option("--max <n>", "Max files to list per section", "50")
+  .action(async (options) => {
+    await ensureInitialized();
+
+    const { BackupManager } = require(path.resolve(__dirname, "..", "src", "backup.js"));
+    const mgr = new BackupManager();
+    const backups = await mgr.listBackups();
+    if (backups.length === 0) {
+      process.stdout.write("📦 No backups found\n");
+      process.stdout.write("Tip: synapse optimize --backup OR synapse backup list\n");
+      process.exitCode = 1;
+      return;
+    }
+
+    const max = Math.max(1, parseInt(String(options.max || "50"), 10) || 50);
+    const nameRaw = typeof options.backup === "string" ? options.backup.trim() : "";
+    const name = nameRaw || backups[0];
+    const backupPath = path.join(backupRootDir(), name);
+    const backupRulesPath = path.join(backupPath, "rules");
+    const currentRulesPath = rulesDir();
+
+    if (!(await fs.pathExists(backupRulesPath))) {
+      process.stdout.write(`❌ Backup not found or missing rules/: ${name}\n`);
+      process.stdout.write("Run: synapse backup list\n");
+      process.exitCode = 1;
+      return;
+    }
+
+    const currentFiles = (await fs.readdir(currentRulesPath).catch(() => [])).filter((f) => String(f).toLowerCase().endsWith(".synapse"));
+    const backupFiles = (await fs.readdir(backupRulesPath).catch(() => [])).filter((f) => String(f).toLowerCase().endsWith(".synapse"));
+
+    const currentSet = new Set(currentFiles);
+    const backupSet = new Set(backupFiles);
+
+    const added = currentFiles.filter((f) => !backupSet.has(f)).sort();
+    const removed = backupFiles.filter((f) => !currentSet.has(f)).sort();
+
+    const changed = [];
+    for (const f of currentFiles) {
+      if (!backupSet.has(f)) continue;
+      const cur = await fs.readFile(path.join(currentRulesPath, f), "utf8").catch(() => "");
+      const old = await fs.readFile(path.join(backupRulesPath, f), "utf8").catch(() => "");
+      if (normalizeForCompare(cur) !== normalizeForCompare(old)) {
+        changed.push({ file: f, cur, old });
+      }
+    }
+    changed.sort((a, b) => a.file.localeCompare(b.file));
+
+    process.stdout.write(`🔎 Diff vs backup: ${name}\n\n`);
+
+    const total = added.length + removed.length + changed.length;
+    if (total === 0) {
+      process.stdout.write("✅ No changes detected\n");
+      return;
+    }
+
+    if (added.length) {
+      process.stdout.write(`➕ Added (${added.length}):\n`);
+      for (const f of added.slice(0, max)) process.stdout.write(`  - ${f}\n`);
+      if (added.length > max) process.stdout.write(`  … +${added.length - max} more\n`);
+      process.stdout.write("\n");
+    }
+
+    if (removed.length) {
+      process.stdout.write(`➖ Removed (${removed.length}):\n`);
+      for (const f of removed.slice(0, max)) process.stdout.write(`  - ${f}\n`);
+      if (removed.length > max) process.stdout.write(`  … +${removed.length - max} more\n`);
+      process.stdout.write("\n");
+    }
+
+    if (changed.length) {
+      process.stdout.write(`✏️ Changed (${changed.length}):\n`);
+      for (const item of changed.slice(0, max)) {
+        const diff = firstDiffLine(item.old, item.cur);
+        if (!diff) {
+          process.stdout.write(`  - ${item.file}\n`);
+          continue;
+        }
+        process.stdout.write(`  - ${item.file} (line ${diff.line})\n`);
+        process.stdout.write(`      - ${clipLine(diff.a)}\n`);
+        process.stdout.write(`      + ${clipLine(diff.b)}\n`);
+      }
+      if (changed.length > max) process.stdout.write(`  … +${changed.length - max} more\n`);
+    }
+  });
+
+program
+  .command("rollback")
+  .description("Restore rules from a backup (rules only). Run sync after.")
+  .option("--backup <name>", "Backup folder name (default: latest)")
+  .option("--yes", "Skip confirmation prompt")
+  .action(async (options) => {
+    await ensureInitialized();
+
+    const { BackupManager } = require(path.resolve(__dirname, "..", "src", "backup.js"));
+    const mgr = new BackupManager();
+    const backups = await mgr.listBackups();
+    if (backups.length === 0) {
+      process.stdout.write("📦 No backups found\n");
+      process.exitCode = 1;
+      return;
+    }
+
+    const nameRaw = typeof options.backup === "string" ? options.backup.trim() : "";
+    const name = nameRaw || backups[0];
+    const backupPath = path.join(backupRootDir(), name);
+    const backupRulesPath = path.join(backupPath, "rules");
+    if (!(await fs.pathExists(backupRulesPath))) {
+      process.stdout.write(`❌ Backup not found or missing rules/: ${name}\n`);
+      process.stdout.write("Run: synapse backup list\n");
+      process.exitCode = 1;
+      return;
+    }
+
+    if (!options.yes) {
+      if (!process.stdin.isTTY || !process.stdout.isTTY) {
+        process.stdout.write("❌ Rollback requires a TTY unless you pass --yes\n");
+        process.exitCode = 1;
+        return;
+      }
+      const ans = await promptConflict(`Restore .synapse/rules/ from "${name}"? This overwrites current rules. (y/N) `);
+      if (!["y", "yes"].includes(ans)) {
+        process.stdout.write("↩️ Cancelled\n");
+        return;
+      }
+    }
+
+    const created = await mgr.createBackup(process.cwd());
+    process.stdout.write(`📦 Backup saved to: ${created}\n`);
+
+    const currentRulesPath = rulesDir();
+    await fs.remove(currentRulesPath);
+    await fs.ensureDir(currentRulesPath);
+    await fs.copy(backupRulesPath, currentRulesPath, { overwrite: true, errorOnExist: false });
+
+    process.stdout.write(`✅ Rolled back rules to: ${name}\n`);
+    process.stdout.write("Next: synapse sync --all --conflict prompt\n");
+  });
+
+program
+  .command("clean")
+  .description("Remove Synapse-generated files")
+  .option("-a, --all", "Remove ALL Synapse files (config, cache, backups)")
+  .option("--cache", "Remove only cache files")
+  .option("--backups", "Remove only backup files")
+  .option("--config", "Remove only configuration files")
+  .option("-f, --force", "Skip confirmation prompt")
+  .action(async (options) => {
+    const { cleanCommand } = require(path.resolve(__dirname, "..", "src", "commands", "clean.js"));
+    await cleanCommand(options);
+  });
+
 program
   .command("enter-license")
   .description("Save your Synapse Pro license key for CLI features")
@@ -782,9 +1360,15 @@ program
 
     const promptKey = async () =>
       new Promise((resolve) => {
-        const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+        const rl = readline.createInterface({ input: process.stdin, output: process.stdout, terminal: true });
+        rl.stdoutMuted = true;
+        rl._writeToOutput = function _writeToOutput(stringToWrite) {
+          if (rl.stdoutMuted) return;
+          rl.output.write(stringToWrite);
+        };
         rl.question("Enter your license key: ", (answer) => {
           rl.close();
+          process.stdout.write("\n");
           resolve(answer);
         });
       });

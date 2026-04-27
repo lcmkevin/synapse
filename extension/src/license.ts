@@ -1,6 +1,14 @@
 import * as vscode from "vscode";
 import * as http from "http";
 import * as https from "https";
+import {
+  DEFAULT_API_BASE_URL,
+  PRO_CHECKOUT_CANCEL_URL,
+  PRO_CHECKOUT_SUCCESS_URL,
+  PRO_LEARN_MORE_URL,
+  getProPriceLabel,
+  getProTermsLabel,
+} from "./product";
 
 export class LicenseManager {
   private static instance: LicenseManager;
@@ -21,7 +29,7 @@ export class LicenseManager {
 
   private getApiBaseUrl(): string {
     const configured = vscode.workspace.getConfiguration("synapse").get<string>("licenseApiUrl");
-    const base = typeof configured === "string" && configured.trim() ? configured.trim() : "https://www.labs-synapse.com";
+    const base = typeof configured === "string" && configured.trim() ? configured.trim() : DEFAULT_API_BASE_URL;
     return base.replace(/\/+$/, "");
   }
 
@@ -126,8 +134,10 @@ export class LicenseManager {
   }
 
   async showUpgradePrompt(): Promise<void> {
+    const priceLabel = getProPriceLabel();
+    const termsLabel = getProTermsLabel();
     const choice = await vscode.window.showInformationMessage(
-      "This feature requires Synapse Pro.",
+      `This feature requires Synapse Pro (${priceLabel}). ${termsLabel}`,
       "Checkout",
       "Enter License Key",
       "Learn More"
@@ -136,7 +146,12 @@ export class LicenseManager {
       const email = await vscode.window.showInputBox({ prompt: "Email for checkout (optional)" });
       try {
         const base = this.getApiBaseUrl();
-        const { status, json } = await this.postJson(`${base}/api/create-checkout`, { customerEmail: email || "" });
+        const { status, json } = await this.postJson(`${base}/api/create-checkout`, {
+          plan: "pro_lifetime",
+          customerEmail: email || "",
+          success_url: PRO_CHECKOUT_SUCCESS_URL,
+          cancel_url: PRO_CHECKOUT_CANCEL_URL,
+        });
         const url = status === 200 ? json?.url : null;
         if (typeof url === "string" && url.startsWith("https://")) {
           await vscode.env.openExternal(vscode.Uri.parse(url));
@@ -145,12 +160,12 @@ export class LicenseManager {
       } catch {
         void 0;
       }
-      await vscode.env.openExternal(vscode.Uri.parse("https://www.labs-synapse.com/pricing"));
+      await vscode.env.openExternal(vscode.Uri.parse(PRO_LEARN_MORE_URL));
     } else if (choice === "Enter License Key") {
       const key = await vscode.window.showInputBox({ prompt: "Enter your Synapse Pro license key" });
       if (key) await this.activateLicense(key);
     } else if (choice === "Learn More") {
-      await vscode.env.openExternal(vscode.Uri.parse("https://www.labs-synapse.com/pricing"));
+      await vscode.env.openExternal(vscode.Uri.parse(PRO_LEARN_MORE_URL));
     }
   }
 

@@ -1,20 +1,26 @@
-const fs = require("fs-extra");
-const https = require("https");
-const os = require("os");
-const path = require("path");
-const { DEFAULT_API_BASE_URL, PRO_PRICE_LABEL, PRO_TERMS_LABEL, getProCheckoutUrl } = require("./product.js");
+import fs from "fs/promises";
+import https from "https";
+import os from "os";
+import path from "path";
 
-function getApiBaseUrl() {
+export type LicensePlan = "free" | "pro" | "enterprise";
+
+export type CurrentLicense = {
+  valid: boolean;
+  plan: LicensePlan;
+};
+
+function getApiBaseUrl(): string {
   const env = process.env.SYNAPSE_LICENSE_API_URL;
-  const base = typeof env === "string" && env.trim() ? env.trim() : DEFAULT_API_BASE_URL;
+  const base = typeof env === "string" && env.trim() ? env.trim() : "https://labs-synapse.com";
   return base.replace(/\/+$/, "");
 }
 
-function getLicenseKeyPath() {
+function getLicenseKeyPath(): string {
   return path.join(os.homedir(), ".synapse", "license.key");
 }
 
-async function loadSavedLicenseKey() {
+async function loadSavedLicenseKey(): Promise<string> {
   const fromEnv = process.env.SYNAPSE_LICENSE_KEY;
   if (typeof fromEnv === "string" && fromEnv.trim()) return fromEnv.trim();
   const p = getLicenseKeyPath();
@@ -27,7 +33,7 @@ async function loadSavedLicenseKey() {
   }
 }
 
-function postJson(urlString, body) {
+function postJson(urlString: string, body: unknown): Promise<{ status: number; json: any }> {
   return new Promise((resolve, reject) => {
     const url = new URL(urlString);
     const payload = JSON.stringify(body || {});
@@ -64,41 +70,21 @@ function postJson(urlString, body) {
   });
 }
 
-async function isProUser() {
-  if (process.env.SYNAPSE_DEV === "true") return true;
-  if (process.env.SYNAPSE_OFFLINE === "true") return false;
+export async function getCurrentLicense(): Promise<CurrentLicense> {
+  if (process.env.SYNAPSE_DEV === "true") return { valid: true, plan: "pro" };
+  if (process.env.SYNAPSE_OFFLINE === "true") return { valid: false, plan: "free" };
 
   const licenseKey = await loadSavedLicenseKey();
-  if (!licenseKey) return false;
+  if (!licenseKey) return { valid: false, plan: "free" };
 
   try {
     const base = getApiBaseUrl();
     const { status, json } = await postJson(`${base}/api/validate`, { licenseKey });
-    if (status !== 200) return false;
-    return !!json && json.valid === true;
+    if (status !== 200) return { valid: false, plan: "free" };
+    const valid = !!json && json.valid === true;
+    const plan = valid && json && (json.plan === "pro" || json.plan === "enterprise") ? json.plan : "free";
+    return valid ? { valid: true, plan } : { valid: false, plan: "free" };
   } catch {
-    return false;
+    return { valid: false, plan: "free" };
   }
 }
-
-function showUpgradeMessage() {
-  const base = getApiBaseUrl();
-  process.stdout.write("\n❌ This action requires a Pro license.\n");
-  process.stdout.write(`   Pro: ${PRO_PRICE_LABEL} · ${PRO_TERMS_LABEL}\n`);
-  process.stdout.write(`   Upgrade: ${getProCheckoutUrl(base)}\n`);
-  process.stdout.write("   Or enter your license key: synapse enter-license\n\n");
-}
-
-async function saveLicenseKey(licenseKey) {
-  const p = getLicenseKeyPath();
-  await fs.ensureDir(path.dirname(p));
-  await fs.writeFile(p, String(licenseKey || "").trim(), "utf8");
-  if (process.platform !== "win32") {
-    try {
-      await fs.chmod(p, 0o600);
-    } catch {}
-  }
-  return p;
-}
-
-module.exports = { isProUser, showUpgradeMessage, loadSavedLicenseKey, saveLicenseKey, getApiBaseUrl };

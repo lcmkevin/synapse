@@ -93,6 +93,34 @@ body {
 .nav-links a:hover { 
     color: var(--primary); 
 } 
+
+.nav-pro {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.35rem 0.75rem;
+    border-radius: 999px;
+    background: rgba(168, 85, 247, 0.10);
+    color: var(--dark);
+    border: 1px solid rgba(168, 85, 247, 0.25);
+}
+
+.nav-pro:hover {
+    color: var(--dark);
+    background: rgba(168, 85, 247, 0.16);
+    border-color: rgba(168, 85, 247, 0.35);
+}
+
+.nav-pill {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.1rem 0.55rem;
+    border-radius: 999px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    background: var(--gradient-primary);
+    color: white;
+}
  
 .btn { 
     padding: 0.5rem 1.25rem; 
@@ -369,8 +397,9 @@ body {
 } 
  
 .pricing-card.pro { 
-    border: 2px solid var(--primary); 
+    border: 1px solid rgba(168, 85, 247, 0.45); 
     transform: scale(1.02); 
+    background: linear-gradient(180deg, rgba(0,102,255,0.06) 0%, rgba(168,85,247,0.06) 100%), white; 
 } 
  
 .pricing-card.pro:hover { 
@@ -389,6 +418,106 @@ body {
     font-size: 0.75rem; 
     font-weight: 600; 
 } 
+
+.price-caption {
+    margin-top: -0.25rem;
+    margin-bottom: 1rem;
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: rgba(15, 23, 42, 0.75);
+}
+
+.guarantee {
+    text-align: center;
+    margin-top: 1.5rem;
+    font-weight: 600;
+    color: rgba(15, 23, 42, 0.75);
+}
+
+.layout-two-col {
+    display: grid;
+    grid-template-columns: 1.1fr 0.9fr;
+    gap: 2rem;
+    margin-top: 2rem;
+}
+
+.panel {
+    background: white;
+    border: 1px solid var(--gray);
+    border-radius: 20px;
+    padding: 1.5rem;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.06);
+}
+
+.panel h3 {
+    margin-bottom: 0.75rem;
+}
+
+.muted {
+    color: rgba(15, 23, 42, 0.72);
+}
+
+.kpi {
+    display: flex;
+    gap: 1rem;
+    flex-wrap: wrap;
+    margin-top: 1rem;
+}
+
+.kpi .pill {
+    padding: 0.35rem 0.75rem;
+    border-radius: 999px;
+    background: rgba(0,102,255,0.08);
+    border: 1px solid rgba(0,102,255,0.14);
+    color: rgba(15, 23, 42, 0.85);
+    font-weight: 600;
+    font-size: 0.9rem;
+}
+
+.downloads-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 1.25rem;
+    margin-top: 1.5rem;
+}
+
+.download-card {
+    background: white;
+    border: 1px solid var(--gray);
+    border-radius: 18px;
+    padding: 1.25rem;
+    box-shadow: 0 10px 24px rgba(0,0,0,0.06);
+}
+
+.download-card h3 {
+    margin-bottom: 0.5rem;
+}
+
+.download-meta {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    margin: 0.5rem 0 0.75rem;
+}
+
+.tag {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.2rem 0.6rem;
+    border-radius: 999px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    background: rgba(15, 23, 42, 0.06);
+    color: rgba(15, 23, 42, 0.85);
+}
+
+.note {
+    padding: 0.75rem 1rem;
+    border-radius: 16px;
+    background: rgba(0, 102, 255, 0.06);
+    border: 1px solid rgba(0, 102, 255, 0.12);
+    color: rgba(15, 23, 42, 0.80);
+}
  
 .price { 
     font-size: 3rem; 
@@ -514,4 +643,8 @@ body {
     .pricing-card.pro { 
         transform: scale(1); 
     } 
+
+    .layout-two-col {
+        grid-template-columns: 1fr;
+    }
 }

@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Payment Successful | Synapse Pro</title>
+    <meta name="description" content="Synapse Pro payment successful. Activate your license key in the CLI." />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400;14..32,500;14..32,600;14..32,700;14..32,800&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="../../css/style.css" />
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧠</text></svg>" />
+  </head>
+  <body>
+    <nav class="navbar">
+      <div class="nav-container">
+        <a href="../../" class="logo"><span class="logo-icon">🧠</span><span>Synapse</span></a>
+        <div class="nav-links">
+          <a href="../../docs/">Docs</a>
+          <a href="../../downloads/adapters/">Adapters</a>
+          <a href="../" class="nav-pro">Pro <span class="nav-pill">$9</span></a>
+          <a href="https://github.com/lcmkevin/synapse" target="_blank">GitHub</a>
+        </div>
+      </div>
+    </nav>
+
+    <section class="section" style="padding-top: 140px">
+      <h1 class="section-title">Payment Successful!</h1>
+      <p class="section-subtitle">Your Synapse Pro license key has been sent to your email.</p>
+
+      <div class="layout-two-col">
+        <div class="panel">
+          <h3>Activate your Pro key</h3>
+          <ol style="padding-left: 1.25rem; line-height: 1.8">
+            <li>Check your email for the license key.</li>
+            <li>Run <code>synapse enter-license</code> and paste your key.</li>
+            <li>Run <code>synapse adapters update --all</code> to update adapters.</li>
+            <li>Run <code>synapse adapters list</code> to confirm everything is current.</li>
+          </ol>
+          <div class="note" style="margin-top: 1rem">
+            Pro unlocks adapter versions and rollback:
+            <div style="margin-top: 0.5rem">
+              <code>synapse adapters versions cursor</code><br />
+              <code>synapse adapters rollback cursor 1.1.0</code>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <h3>Next steps</h3>
+          <p class="muted">Keep your workflow smooth:</p>
+          <ul class="pricing-features">
+            <li>✅ Read the docs for CLI + IDE setup</li>
+            <li>✅ Download adapters manually (Free path)</li>
+            <li>✅ Use Pro to skip manual downloads</li>
+          </ul>
+          <div class="hero-buttons" style="justify-content: flex-start">
+            <a class="btn btn-primary" href="../../docs/">Open Docs</a>
+            <a class="btn btn-outline" href="../../downloads/adapters/">Adapters</a>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <footer class="footer">
+      <div class="footer-content">
+        <div class="footer-section">
+          <h4>Synapse</h4>
+          <a href="../../">Home</a>
+          <a href="../../docs/">Docs</a>
+          <a href="../../downloads/adapters/">Adapters</a>
+          <a href="../">Pro ($9)</a>
+        </div>
+      </div>
+      <div class="footer-bottom"><p>© 2026 Labs Synapse</p></div>
+    </footer>
+    <script src="../../js/main.js"></script>
+  </body>
+</html>

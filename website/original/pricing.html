@@ -58,7 +58,7 @@ Pro: team sharing + history (optional)</code>
             <div class="price">$0</div>
             <div class="muted">Personal dashboard + core compilation.</div>
             <ul class="list">
-              <li>Adapters: Trae + Cursor</li>
+              <li>2 IDE targets</li>
               <li>Token analysis (current snapshot)</li>
               <li>Cost dashboard (current snapshot)</li>
               <li>Lazy-skill suggestions</li>
@@ -69,6 +69,7 @@ Pro: team sharing + history (optional)</code>
             <div class="price">$9<span style="font-size:14px;font-weight:700">/mo</span></div>
             <div class="muted">Automation and collaboration.</div>
             <ul class="list">
+              <li>IDE adapter auto-update + rollback</li>
               <li>Convert large rules to lazy-loaded skills</li>
               <li>Cost history (stored per user)</li>
               <li>Team sharing (mock in current build)</li>
@@ -128,7 +129,12 @@ Pro: team sharing + history (optional)</code>
           const resp = await fetch("/api/create-checkout", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ customerEmail: email }),
+            body: JSON.stringify({
+              plan: "pro_lifetime",
+              customerEmail: email,
+              success_url: "https://labs-synapse.com/pro/success/",
+              cancel_url: "https://labs-synapse.com/pro/checkout/",
+            }),
           });
           const data = await resp.json();
           if (data && data.url) {

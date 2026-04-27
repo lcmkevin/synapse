@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Adapter Downloads | Synapse</title>
+    <meta name="description" content="Manually download Synapse IDE adapter JSON files (Free tier)." />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400;14..32,500;14..32,600;14..32,700;14..32,800&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="../../css/style.css" />
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧠</text></svg>" />
+  </head>
+  <body>
+    <nav class="navbar">
+      <div class="nav-container">
+        <a href="../../" class="logo"><span class="logo-icon">🧠</span><span>Synapse</span></a>
+        <div class="nav-links">
+          <a href="../../index.html#features">Features</a>
+          <a href="../../index.html#pricing">Pricing</a>
+          <a href="../../docs/">Docs</a>
+          <a href="./">Adapters</a>
+          <a href="../../pro/" class="nav-pro">Pro <span class="nav-pill">$9</span></a>
+          <a href="https://github.com/lcmkevin/synapse" target="_blank">GitHub</a>
+        </div>
+      </div>
+    </nav>
+
+    <section class="section" style="padding-top: 140px">
+      <h1 class="section-title">Manual Adapter Downloads</h1>
+      <p class="section-subtitle">Free tier uses manual downloads. Put the JSON file in <code>~/.synapse/adapters/{id}.json</code>.</p>
+
+      <div class="layout-two-col">
+        <div class="panel">
+          <h3>Install path</h3>
+          <div class="note">
+            <div><strong>macOS / Linux</strong></div>
+            <div><code>~/.synapse/adapters/{id}.json</code></div>
+            <div style="margin-top: 0.75rem"><strong>Windows</strong></div>
+            <div><code>%USERPROFILE%\\.synapse\\adapters\\{id}.json</code></div>
+          </div>
+          <div style="margin-top: 1rem" class="note">
+            If you prefer a pinned adapter (no auto-updates), you can add an override file:
+            <div style="margin-top: 0.5rem"><code>~/.synapse/adapters/overrides/{id}.json</code></div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <h3>Skip manual downloads</h3>
+          <p class="muted">Tired of downloading JSON files?</p>
+          <ul class="pricing-features">
+            <li>✅ One-click adapter updates</li>
+            <li>✅ Background updates during sync</li>
+            <li>✅ Adapter versions + rollback</li>
+          </ul>
+          <a class="btn btn-primary btn-large" href="../../pro/checkout/">Upgrade to Pro - $9 →</a>
+          <div class="guarantee">30-day money-back guarantee.</div>
+        </div>
+      </div>
+
+      <div class="panel" style="margin-top: 2rem">
+        <h2 style="margin-bottom: 0.5rem">Available adapters</h2>
+        <p class="muted" style="margin-bottom: 1rem">Downloads come from <code>/downloads/adapters/index.json</code>.</p>
+        <div id="status" class="note">Loading adapters…</div>
+        <div id="grid" class="downloads-grid" style="margin-top: 1rem"></div>
+      </div>
+    </section>
+
+    <script>
+      const statusEl = document.getElementById("status");
+      const gridEl = document.getElementById("grid");
+
+      function setStatus(msg) {
+        if (!statusEl) return;
+        statusEl.textContent = msg;
+      }
+
+      function escapeHtml(s) {
+        return String(s || "")
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;")
+          .replace(/'/g, "&#039;");
+      }
+
+      function renderCard(adapter) {
+        const id = typeof adapter.id === "string" ? adapter.id : "";
+        const version = typeof adapter.version === "string" ? adapter.version : "";
+        const releaseNotes = typeof adapter.releaseNotes === "string" ? adapter.releaseNotes : "";
+        const downloadUrl = typeof adapter.downloadUrl === "string" ? adapter.downloadUrl : "";
+        if (!id || !downloadUrl) return "";
+
+        const notes = releaseNotes ? `<div class="note" style="margin-top:0.75rem">${escapeHtml(releaseNotes)}</div>` : "";
+
+        return `
+          <div class="download-card">
+            <h3>${escapeHtml(id)}</h3>
+            <div class="download-meta">
+              ${version ? `<span class="tag">v${escapeHtml(version)}</span>` : ""}
+              <span class="tag">JSON</span>
+            </div>
+            <div class="muted">Install: <code>~/.synapse/adapters/${escapeHtml(id)}.json</code></div>
+            ${notes}
+            <div style="margin-top:1rem; display:flex; gap:0.75rem; flex-wrap:wrap">
+              <a class="btn btn-primary" href="${escapeHtml(downloadUrl)}" download>Download</a>
+              <a class="btn btn-outline" href="../../pro/">Get Pro</a>
+            </div>
+          </div>
+        `;
+      }
+
+      async function load() {
+        try {
+          const resp = await fetch("/downloads/adapters/index.json", { cache: "no-store" });
+          if (!resp.ok) throw new Error("index.json not found");
+          const data = await resp.json();
+          const list = Array.isArray(data) ? data : [];
+          if (list.length === 0) {
+            setStatus("No adapters found.");
+            return;
+          }
+          setStatus(`Found ${list.length} adapters.`);
+          if (gridEl) gridEl.innerHTML = list.map(renderCard).join("");
+        } catch {
+          setStatus("Adapters index not found. Run: node scripts/export-adapters.js (with SUPABASE_URL + SUPABASE_ANON_KEY) and redeploy.");
+        }
+      }
+
+      void load();
+    </script>
+    <script src="../../js/main.js"></script>
+  </body>
+</html>

@@ -1,6 +1,7 @@
 // UPDATED: Synapse extension entry point (clean-slate)
 import * as vscode from "vscode";
 import * as fs from "fs/promises";
+import * as os from "os";
 import * as path from "path";
 import { AdapterManager } from "./compiler/adapter-manager"; // NEW:
 import { ActionsViewProvider } from "./features/actionsView";
@@ -11,8 +12,86 @@ import { SkillConverter } from "./features/tokenAnalysis/skillConverter";
 import { CostDashboardProvider } from "./features/costDashboard";
 import { ImportScanner } from "./features/importScanner";
 import { FormatConverter } from "./features/formatConverter";
+import { UNINSTALL_FEEDBACK_URL } from "./product";
 
 let tokenCounter: TokenCounter | null = null;
+let cleanupContext: vscode.ExtensionContext | null = null;
+
+async function fsPathExists(p: string): Promise<boolean> {
+  try {
+    await fs.access(p);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function deleteFsPath(p: string): Promise<boolean> {
+  try {
+    await fs.rm(p, { recursive: true, force: true });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function performCleanup(context: vscode.ExtensionContext): Promise<number> {
+  const homeDir = os.homedir();
+  const synapseDir = path.join(homeDir, ".synapse");
+
+  const workspaceFolders = vscode.workspace.workspaceFolders || [];
+  const workspaceSynapseDirs: string[] = [];
+  for (const folder of workspaceFolders) {
+    const synapsePath = path.join(folder.uri.fsPath, ".synapse");
+    if (await fsPathExists(synapsePath)) workspaceSynapseDirs.push(synapsePath);
+  }
+
+  const storageDirs: string[] = [];
+  if (context.storageUri?.fsPath) storageDirs.push(context.storageUri.fsPath);
+  if (context.globalStorageUri?.fsPath) storageDirs.push(context.globalStorageUri.fsPath);
+
+  let removedCount = 0;
+
+  if (await fsPathExists(synapseDir)) {
+    if (await deleteFsPath(synapseDir)) removedCount += 1;
+  }
+
+  for (const p of workspaceSynapseDirs) {
+    if (await deleteFsPath(p)) removedCount += 1;
+  }
+
+  for (const p of storageDirs) {
+    if (await fsPathExists(p)) {
+      if (await deleteFsPath(p)) removedCount += 1;
+    }
+  }
+
+  return removedCount;
+}
+
+async function promptForCleanup(context: vscode.ExtensionContext): Promise<void> {
+  const choice = await vscode.window.showWarningMessage(
+    "Synapse Extension - Cleanup Options",
+    { modal: true, detail: "Do you want to remove Synapse-generated files and configuration from this machine?" },
+    "Remove Everything",
+    "Keep Configuration",
+    "Cancel"
+  );
+
+  if (choice === "Remove Everything") {
+    const removedCount = await performCleanup(context);
+    void vscode.window.showInformationMessage(`✅ Synapse files removed successfully (${removedCount} location(s))`);
+    const feedback = await vscode.window.showInformationMessage("Help us improve Synapse", "Share Feedback", "No Thanks");
+    if (feedback === "Share Feedback") {
+      void vscode.env.openExternal(vscode.Uri.parse(UNINSTALL_FEEDBACK_URL));
+    }
+    return;
+  }
+
+  if (choice === "Keep Configuration") {
+    void vscode.window.showInformationMessage("Synapse configuration kept at ~/.synapse/");
+  }
+}
 
 class PlaceholderViewProvider implements vscode.WebviewViewProvider {
   resolveWebviewView(webviewView: vscode.WebviewView) {
@@ -50,6 +129,7 @@ async function loadLicenseManager(context: vscode.ExtensionContext): Promise<Lic
 
 export async function activate(context: vscode.ExtensionContext) {
   console.log("Synapse extension activated"); // NEW:
+  cleanupContext = context;
 
   const license = await loadLicenseManager(context);
   const output = vscode.window.createOutputChannel("Synapse");
@@ -601,6 +681,18 @@ Use meaningful variable names
   const workspaceRootForAuto = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
   if (autoConnect && workspaceRootForAuto) connectToSynapseWS(workspaceRootForAuto);
 
+  const cleanupCommand = vscode.commands.registerCommand("synapse.cleanup", safeCommand("Cleanup", async () => {
+    await promptForCleanup(context);
+  }));
+
+  context.subscriptions.push({
+    dispose: () => {
+      const ctx = cleanupContext;
+      if (!ctx) return;
+      void promptForCleanup(ctx);
+    },
+  });
+
   const placeholderProvider = new PlaceholderViewProvider();
   const actionsProvider = new ActionsViewProvider(context.extensionUri);
   const synergyProvider = new SynergyViewProvider(context.extensionUri);
@@ -622,6 +714,7 @@ Use meaningful variable names
     detectCommand, // NEW:
     wsConnectCommand,
     wsDisconnectCommand,
+    cleanupCommand,
     vscode.window.registerWebviewViewProvider("synapseActionsView", actionsProvider),
     vscode.window.registerWebviewViewProvider("synapseCostDashboard", dashboardProvider),
     vscode.window.registerWebviewViewProvider("synapseSynergyView", synergyProvider),
@@ -639,4 +732,5 @@ export function deactivate() {
     void 0;
   }
   tokenCounter = null;
+  cleanupContext = null;
 }

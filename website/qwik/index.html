@@ -20,25 +20,28 @@
                 <a href="#features">Features</a>
                 <a href="#pricing">Pricing</a>
                 <a href="docs/">Docs</a>
+                <a href="downloads/adapters/">Adapters</a>
+                <a href="pro/" class="nav-pro">Pro <span class="nav-pill">$9</span></a>
                 <a href="https://github.com/lcmkevin/synapse" target="_blank">GitHub</a>
-                <a href="#install" class="btn btn-primary">Install →</a>
+                <a href="downloads/adapters/" class="btn btn-primary">Download Free →</a>
             </div>
         </div>
     </nav>
 
     <section class="hero">
         <div class="hero-content">
-            <span class="badge">✨ Trae + Cursor + Windsurf + Cline + Zed outputs</span>
-            <h1>One Rulebase.<br>Any IDE. Forever.</h1>
-            <p class="hero-subtitle">Write rules once in Synapse format. Compile to Trae, Cursor, Windsurf, Cline, and Zed, and expose the same rulebase via MCP + WebSocket for any toolchain.</p>
+            <!-- NEW: Updated hero positioning -->
+            <span class="badge">✨ Portable rules across IDEs • Safe sync &amp; rollback • Zero lock-in</span>
+            <h1>Portable AI Rules.<br>Safe Sync. Zero Lock-in.</h1>
+            <p class="hero-subtitle">Write rules once in Synapse format. Sync to Trae, Cursor, Windsurf, Cline, and Zed. Add rollback, local token cost analysis, and proactive optimization so changes stay safe and cheap.</p>
             <div class="hero-buttons">
-                <a href="#install" class="btn btn-primary btn-large">🚀 Install Synapse</a>
-                <a href="docs/" class="btn btn-outline btn-large">📖 Read Docs</a>
+                <a href="downloads/adapters/" class="btn btn-primary btn-large">⬇️ Download Free</a>
+                <a href="pro/" class="btn btn-outline btn-large">⚡ Buy Pro - $9</a>
             </div>
             <div class="stats">
                 <div class="stat-item">
                     <div class="stat-number">5</div>
-                    <div class="stat-label">IDE Outputs</div>
+                    <div class="stat-label">Built-in IDE Adapters</div>
                 </div>
                 <div class="stat-item">
                     <div class="stat-number">70%</div>
@@ -49,6 +52,28 @@
                     <div class="stat-label">Servers (MCP + WS)</div>
                 </div>
             </div>
+        </div>
+    </section>
+
+    <!-- NEW: Competitive comparison section (generic, evidence-safe) -->
+    <section class="section">
+        <h2 class="section-title">How Synapse Compares</h2>
+        <p class="section-subtitle">Most tools convert formats. Synapse adds safe sync, optimization, and zero lock-in.</p>
+        <div class="comparison-wrapper">
+            <table>
+                <thead>
+                    <tr><th>Feature</th><th>Format Converters</th><th>Single-IDE Rules</th><th>Synapse</th></tr>
+                </thead>
+                <tbody>
+                    <tr><td>Cross-IDE sync (Trae, Cursor, Windsurf, Cline, Zed)</td><td class="cross">❌</td><td class="cross">❌</td><td class="check">✅</td></tr>
+                    <tr><td>Safe rollback &amp; restore</td><td class="cross">❌</td><td class="cross">❌</td><td class="check">✅</td></tr>
+                    <tr><td>Local token cost analysis</td><td class="cross">❌</td><td class="cross">❌</td><td class="check">✅</td></tr>
+                    <tr><td>Proactive optimization suggestions</td><td class="cross">❌</td><td class="cross">❌</td><td class="check">✅</td></tr>
+                    <tr><td>Conflict detection</td><td class="cross">❌</td><td class="cross">❌</td><td class="check">✅</td></tr>
+                    <tr><td>CLI + Extension + MCP</td><td class="cross">❌</td><td class="cross">❌</td><td class="check">✅</td></tr>
+                    <tr><td>Import existing IDE rules (zero lock-in)</td><td class="cross">❌</td><td class="cross">❌</td><td class="check">✅</td></tr>
+                </tbody>
+            </table>
         </div>
     </section>
 
@@ -69,7 +94,7 @@
             <div class="feature-card">
                 <div class="feature-icon">🧠</div>
                 <h3>Pro License Gate</h3>
-                <p>Unlock Pro features via license key: unlimited targets, auto-convert large rules to skills, and more.</p>
+                <p>Unlock Pro features via license key: unlimited targets, auto-convert large rules to skills, adapter auto-updates, and more.</p>
             </div>
             <div class="feature-card">
                 <div class="feature-icon">⚡</div>
@@ -115,33 +140,37 @@
 
     <section id="pricing" class="section">
         <h2 class="section-title">Simple, Transparent Pricing</h2>
-        <p class="section-subtitle">Start free. Upgrade when you need team features.</p>
+        <p class="section-subtitle">Free for 5 IDEs. Pro for $9 one-time (no recurring fees). Enterprise later.</p>
         <div class="pricing-grid">
             <div class="pricing-card">
                 <h3>Free</h3>
-                <div class="price">$0<span>/month</span></div>
+                <div class="price">$0<span>forever</span></div>
                 <ul class="pricing-features">
-                    <li>✅ Basic token analysis</li>
-                    <li>✅ Local optimization (analysis)</li>
-                    <li>✅ 2 IDE targets</li>
-                    <li>✅ Cost dashboard</li>
-                    <li>✅ Community support</li>
+                    <li>✅ 5 IDE adapters (Cursor, Trae, Windsurf, Cline, Zed)</li>
+                    <li>✅ Rule compilation &amp; sync</li>
+                    <li>✅ Token analysis + cost dashboard</li>
+                    <li>✅ Manual adapter downloads</li>
+                    <li>❌ No adapter versions/rollback</li>
+                    <li>❌ No auto-updates</li>
                 </ul>
-                <a href="#install" class="btn btn-outline">Get Started</a>
+                <a href="downloads/adapters/" class="btn btn-outline">Download adapters</a>
             </div>
             <div class="pricing-card pro">
-                <div class="popular-badge">Most Popular</div>
+                <div class="popular-badge">Best Value</div>
                 <h3>Pro</h3>
-                <div class="price">$9<span>/month</span></div>
+                <div class="price">$9<span>one-time</span></div>
+                <div class="price-caption">One-time payment • No recurring fees</div>
                 <ul class="pricing-features">
                     <li>✅ Everything in Free</li>
+                    <li>✅ One-click adapter updates</li>
+                    <li>✅ Background updates during sync</li>
+                    <li>✅ Adapter versions + rollback</li>
+                    <li>✅ Priority new IDE support</li>
                     <li>✅ Unlimited IDE targets</li>
-                    <li>✅ Auto-convert to lazy skills</li>
-                    <li>✅ One-click optimization auto-fix</li>
                     <li>✅ License-gated Pro features</li>
                     <li>✅ Priority support</li>
                 </ul>
-                <a href="pricing.html" class="btn btn-primary">Checkout →</a>
+                <a href="pro/checkout/" class="btn btn-primary">Buy Pro - $9 →</a>
             </div>
             <div class="pricing-card">
                 <h3>Enterprise</h3>
@@ -155,6 +184,7 @@
                 <a href="404.html" class="btn btn-outline">To be rolled out</a>
             </div>
         </div>
+        <div class="guarantee">30-day money-back guarantee on Pro.</div>
     </section>
 
     <section id="install" class="section">
@@ -180,8 +210,8 @@
         <h2>Ready to unify your AI rules?</h2>
         <p>Join thousands of developers saving time and money with Synapse.</p>
         <div class="hero-buttons">
-            <a href="#install" class="btn btn-light">Install Synapse</a>
-            <a href="docs/" class="btn btn-outline">Read Documentation</a>
+            <a href="downloads/adapters/" class="btn btn-light">Download Free</a>
+            <a href="pro/" class="btn btn-outline">Buy Pro - $9</a>
         </div>
     </div>
 
@@ -192,6 +222,8 @@
                 <a href="#features">Features</a>
                 <a href="#pricing">Pricing</a>
                 <a href="docs/">Docs</a>
+                <a href="downloads/adapters/">Adapters</a>
+                <a href="pro/">Pro ($9)</a>
             </div>
             <div class="footer-section">
                 <h4>Community</h4>

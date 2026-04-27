@@ -96,8 +96,10 @@
                 <a href="../index.html#features">Features</a>
                 <a href="../index.html#pricing">Pricing</a>
                 <a href="./">Docs</a>
+                <a href="../downloads/adapters/">Adapters</a>
+                <a href="../pro/" class="nav-pro">Pro <span class="nav-pill">$9</span></a>
                 <a href="https://github.com/lcmkevin/synapse">GitHub</a>
-                <a href="../index.html#install" class="btn btn-primary">Install</a>
+                <a href="../downloads/adapters/" class="btn btn-primary">Download Free</a>
             </div>
         </div>
     </nav>
@@ -160,6 +162,8 @@ synapse optimize --backup                 # create a local backup before analyzi
 synapse optimize --apply                  # apply auto-fixes (Pro)
 synapse backup list                       # list local backups
 synapse backup restore --backup &lt;name&gt;      # restore a backup
+synapse diff                              # compare current rules vs latest backup
+synapse rollback --backup &lt;name&gt;            # restore rules only; run sync after
 synapse enter-license                     # save Pro key for CLI features
 synapse watch                             # auto-sync on changes</code></pre>
 
@@ -188,6 +192,24 @@ npm run build:binary:win
             <pre><code>synapse sync --conflict prompt          # ask before overwrite
 synapse sync --rules my-rule,other-rule  # sync selected rules only</code></pre>
 
+            <h2 id="adapters">IDE Adapters</h2>
+            <p>Adapters are small JSON files that define how Synapse integrates with each IDE.</p>
+            <pre><code>~/.synapse/adapters/cursor.json
+~/.synapse/adapters/trae.json
+~/.synapse/adapters/windsurf.json
+~/.synapse/adapters/cline.json
+~/.synapse/adapters/zed.json</code></pre>
+            <p>Commands:</p>
+            <pre><code>synapse adapters list
+synapse adapters update cursor
+synapse adapters update --all
+synapse adapters versions cursor          # Pro
+synapse adapters rollback cursor 1.1.0    # Pro</code></pre>
+            <p>Free tier uses manual adapter downloads (no auto-updates). Pro unlocks one-click updates, background updates during <code>synapse sync</code>, adapter version history, and rollback.</p>
+            <p>To pin a manual adapter and disable auto-updates, place an override file:</p>
+            <pre><code>~/.synapse/adapters/overrides/cursor.json</code></pre>
+            <p>During <code>synapse sync</code>, Synapse checks for adapter updates in the background (non-blocking). Pro users can auto-update; Free users get a tip to run <code>synapse adapters update</code>.</p>
+
             <h2 id="token">Token Analysis</h2>
             <p>Analyze token usage and estimated cost per session to find the biggest wins quickly.</p>
 
@@ -204,20 +226,23 @@ synapse backup restore --backup backup_2026-04-22T...</code></pre>
             <p>Open the “Cost Dashboard” sidebar view to see totals, top rules, and recommendations.</p>
 
             <h2 id="pro">Pro License</h2>
-            <p>Free tier is limited to 2 enabled IDE targets. Pro unlocks:</p>
+            <p>Free tier includes 5 built-in IDE adapters and manual adapter downloads. Pro unlocks:</p>
             <pre><code>- Unlimited targets
 - Convert large rules to lazy-loaded skills
+- One-click adapter updates + background updates during sync
+- Adapter versions + rollback
 - Additional Pro-only capabilities</code></pre>
             <p>To get a Pro key, complete checkout. After successful payment, Synapse issues a license key and stores it server-side.</p>
             <p>To activate Pro in the IDE:</p>
             <pre><code>Command Palette → Synapse: Upgrade to Pro
 Enter License Key</code></pre>
-            <p>Pro keys are validated by the server (HMAC signature + database status). Revoked or expired keys stop working.</p>
+            <p>Pro keys are validated by the server (HMAC signature + database status). Revoked keys stop working.</p>
 
             <h3 id="pro-features">Pro Features</h3>
             <pre><code>- Unlimited IDE targets (Trae, Cursor, Windsurf, Cline, Zed, ...)
 - Optional lazy-loaded skills to reduce prompt size and token cost
-- Server-validated license key (revocable, time-bound)</code></pre>
+- Auto-update IDE adapters (with versions + rollback)
+- Server-validated license key (revocable)</code></pre>
             <p>How activation works: you complete checkout, receive a license key, then enter it in VS Code. The extension validates it against the server before unlocking Pro.</p>
             <p>Pro also unlocks CLI auto-fix in <code>synapse optimize --apply</code> (license validated by the server).</p>
 

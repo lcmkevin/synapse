@@ -8,6 +8,61 @@ Synapse uses a project-local master folder:
   - `skills/`
   - `config.json`
 
+<!-- NEW: Competitive positioning (evidence-safe) -->
+## Why Synapse is Different
+
+Most rule tools only convert formats. Synapse gives you **safe sync, cost optimization, and zero lock-in**.
+
+| Capability | Typical converters | Single-IDE rule systems | **Synapse** |
+|------------|-------------------|--------------------------|-------------|
+| Cross-IDE sync (Trae, Cursor, Windsurf, Cline, Zed) | ❌ | ❌ | ✅ |
+| Safe rollback & restore | ❌ | ❌ | ✅ |
+| Local token cost analysis | ❌ | ❌ | ✅ |
+| Proactive optimization suggestions | ❌ | ❌ | ✅ |
+| Conflict detection | ❌ | ❌ | ✅ |
+| CLI + VS Code + MCP (3 interfaces) | ❌ | ❌ | ✅ |
+| Import from existing IDEs (zero lock-in) | ❌ | ❌ | ✅ |
+
+<!-- NEW: Claim 1 -->
+## Safe Sync with Rollback
+
+```bash
+synapse backup list
+synapse sync --all --conflict prompt --backup
+synapse rollback --backup <name>
+synapse backup restore --backup <name>
+```
+
+<!-- NEW: Claim 2 -->
+## Token Cost Analysis (Local, No API)
+
+```bash
+synapse analyze
+synapse optimize
+synapse optimize --apply --backup
+```
+
+Notes:
+- `synapse analyze` prints token totals + an estimated USD cost using `--usd-per-1m` (or `SYNAPSE_USD_PER_1M_TOKENS`)
+- `synapse optimize` detects conflicts + suggests how to reduce always-on token spend; `--apply` is Pro
+
+<!-- NEW: Claim 4 -->
+## Three Interfaces, One Engine
+
+| Interface | Command | Best For |
+|-----------|---------|----------|
+| CLI | `synapse sync --all` | CI/CD, automation |
+| VS Code | Command Palette → "Synapse: Sync Rules" | Daily development |
+| MCP Server | `synapse mcp` (or `synapse serve --mcp-only`) | AI agents |
+
+<!-- NEW: Claim 5 -->
+## Import from Existing IDEs (Zero Lock-in)
+
+```bash
+synapse importFromIDE
+synapse sync --target trae
+```
+
 ## How It Works
 
 - Author rules in `.synapse/rules/*.synapse`
@@ -28,7 +83,11 @@ node .\bin\synapse-unified.js --help
 node .\bin\synapse-unified.js init
 node .\bin\synapse-unified.js sync --all --conflict prompt
 node .\bin\synapse-unified.js analyze
+node .\bin\synapse-unified.js diff
+node .\bin\synapse-unified.js rollback --backup backup_2026-04-22T...
 ```
+
+Note: `bin/synapse.js` is a deprecated shim that forwards to `bin/synapse-unified.js`.
 
 ## Quick Start (Dashboard)
 

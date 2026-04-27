@@ -150,8 +150,24 @@ async function updateLicenseBySubscriptionId(subscriptionId, patch) {
 }
 
 function expiresAtOneYearFromNowIso() {
-  const oneYearMs = 365 * 24 * 60 * 60 * 1000;
-  return new Date(Date.now() + oneYearMs).toISOString();
+  return null;
+}
+
+function normalizePlanCodeFromMetadata(obj) {
+  const meta = obj && typeof obj === "object" ? obj.metadata : null;
+  const v = meta && typeof meta === "object" ? meta.plan_code : null;
+  const planCode = typeof v === "string" ? v.trim().toLowerCase() : "";
+  if (planCode === "pro") return "pro_lifetime";
+  return planCode || "pro_lifetime";
+}
+
+function normalizeLicensePlanFromMetadata(obj, planCode) {
+  const meta = obj && typeof obj === "object" ? obj.metadata : null;
+  const v = meta && typeof meta === "object" ? meta.license_plan : null;
+  const licensePlan = typeof v === "string" ? v.trim().toLowerCase() : "";
+  if (licensePlan === "enterprise") return "enterprise";
+  if (planCode === "enterprise") return "enterprise";
+  return "pro";
 }
 
 async function handleStripeWebhook(req, res) {
@@ -178,16 +194,28 @@ async function handleStripeWebhook(req, res) {
       const email = obj?.customer_details?.email || obj?.customer_email || null;
       const subscriptionId = obj?.subscription || null;
       const customerId = obj?.customer || null;
+      const checkoutSessionId = obj?.id || null;
+      const paymentIntentId = obj?.payment_intent || null;
+      const planCode = normalizePlanCodeFromMetadata(obj);
+      const licensePlan = normalizeLicensePlanFromMetadata(obj, planCode);
+      const stripePriceId =
+        obj?.metadata && typeof obj.metadata === "object" && typeof obj.metadata.stripe_price_id === "string" && obj.metadata.stripe_price_id.trim()
+          ? obj.metadata.stripe_price_id.trim()
+          : null;
 
       const licenseKey = generateLicenseKey();
       await upsertLicense({
         license_key: licenseKey,
         email,
-        plan: "pro",
+        plan: licensePlan,
+        plan_code: planCode,
         status: "active",
         expires_at: expiresAtOneYearFromNowIso(),
         stripe_customer_id: customerId,
         stripe_subscription_id: subscriptionId,
+        stripe_checkout_session_id: checkoutSessionId,
+        stripe_payment_intent_id: paymentIntentId,
+        stripe_price_id: stripePriceId,
       });
 
       return res.status(200).json({ ok: true });

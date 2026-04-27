@@ -50,7 +50,7 @@ coding, Trae for PR reviews, Windsurf for debugging).
 Synapse lets you write rules once in .synapse format, then
 automatically compiles to each IDE's native format.
 
-Free for 2 IDEs, $9/mo for unlimited.
+Free for 5 IDE adapters, $9 one-time for Pro (no recurring fees).
 
 Tech: TypeScript, tiktoken for token counting, MCP server.
 

@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Synapse Pro Checkout</title>
+    <meta name="description" content="Checkout for Synapse Pro. $9 one-time payment. No recurring fees." />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400;14..32,500;14..32,600;14..32,700;14..32,800&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="../../css/style.css" />
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧠</text></svg>" />
+  </head>
+  <body>
+    <nav class="navbar">
+      <div class="nav-container">
+        <a href="../../" class="logo"><span class="logo-icon">🧠</span><span>Synapse</span></a>
+        <div class="nav-links">
+          <a href="../../index.html#features">Features</a>
+          <a href="../../index.html#pricing">Pricing</a>
+          <a href="../../docs/">Docs</a>
+          <a href="../../downloads/adapters/">Adapters</a>
+          <a href="../" class="nav-pro">Pro <span class="nav-pill">$9</span></a>
+          <a href="https://github.com/lcmkevin/synapse" target="_blank">GitHub</a>
+        </div>
+      </div>
+    </nav>
+
+    <section class="section" style="padding-top: 140px">
+      <h1 class="section-title">Checkout</h1>
+      <p class="section-subtitle">Synapse Pro • $9 one-time • No recurring fees</p>
+
+      <div class="layout-two-col">
+        <div class="panel">
+          <h3>Order summary</h3>
+          <div class="price">$9 <span>one-time</span></div>
+          <div class="price-caption">Synapse Pro • No recurring fees</div>
+          <div class="note">
+            30-day money-back guarantee. Your license key will be emailed after payment.
+          </div>
+
+          <div style="margin-top: 1.25rem">
+            <h3>Included</h3>
+            <ul class="pricing-features">
+              <li>✅ One-click adapter updates</li>
+              <li>✅ Background updates during sync</li>
+              <li>✅ Adapter versions + rollback</li>
+              <li>✅ Priority new IDE adapters</li>
+              <li>✅ Priority support</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="panel">
+          <h3>Secure payment</h3>
+          <p class="muted">You’ll be redirected to Stripe Checkout.</p>
+          <div class="note" style="margin: 0.75rem 0 1rem">
+            If you have a discount code, you can enter it on the Stripe page.
+          </div>
+
+          <label class="muted" for="email" style="display: block; margin-bottom: 0.35rem">Email (optional)</label>
+          <input
+            id="email"
+            type="email"
+            placeholder="you@company.com"
+            style="width: 100%; padding: 0.75rem 0.9rem; border-radius: 12px; border: 1px solid var(--gray); font-size: 1rem"
+          />
+
+          <button id="payBtn" class="btn btn-primary btn-large" style="margin-top: 1rem; width: 100%; justify-content: center">
+            Pay $9 and get a Pro key →
+          </button>
+
+          <div id="err" class="note" style="margin-top: 1rem; display: none; border-color: rgba(239, 68, 68, 0.25); background: rgba(239, 68, 68, 0.06)"></div>
+        </div>
+      </div>
+    </section>
+
+    <script>
+      const payBtn = document.getElementById("payBtn");
+      const emailEl = document.getElementById("email");
+      const errEl = document.getElementById("err");
+
+      function setError(msg) {
+        if (!errEl) return;
+        if (!msg) {
+          errEl.style.display = "none";
+          errEl.textContent = "";
+          return;
+        }
+        errEl.style.display = "block";
+        errEl.textContent = msg;
+      }
+
+      async function startCheckout() {
+        setError("");
+        if (payBtn) {
+          payBtn.disabled = true;
+          payBtn.textContent = "Redirecting to Stripe…";
+        }
+
+        const email = emailEl && typeof emailEl.value === "string" ? emailEl.value.trim() : "";
+
+        try {
+          const resp = await fetch("/api/create-checkout", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              plan: "pro_lifetime",
+              customerEmail: email,
+              success_url: "https://labs-synapse.com/pro/success/",
+              cancel_url: "https://labs-synapse.com/pro/checkout/",
+            }),
+          });
+
+          const text = await resp.text();
+          const data = (() => {
+            try {
+              return text ? JSON.parse(text) : null;
+            } catch {
+              return null;
+            }
+          })();
+
+          const url = data && typeof data.url === "string" ? data.url : "";
+          if (url) {
+            window.location.href = url;
+            return;
+          }
+
+          const stripeMsg = data && typeof data.stripeMessage === "string" ? data.stripeMessage : "";
+          const errMsg = stripeMsg || (data && typeof data.error === "string" ? data.error : "") || "Checkout failed.";
+          setError(errMsg);
+        } catch {
+          setError("Checkout failed.");
+        } finally {
+          if (payBtn) {
+            payBtn.disabled = false;
+            payBtn.textContent = "Pay $9 and get a Pro key →";
+          }
+        }
+      }
+
+      if (payBtn) payBtn.addEventListener("click", () => void startCheckout());
+    </script>
+    <script src="../../js/main.js"></script>
+  </body>
+</html>

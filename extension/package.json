@@ -1,7 +1,7 @@
 {
   "name": "synapse",
   "displayName": "Synapse Rules",
-  "description": "One rulebase. Any IDE. Forever. Sync rules across Trae, Cursor, Windsurf, and more.",
+  "description": "Portable AI rules across IDEs with safe sync, token cost analysis, and zero lock-in",
   "version": "0.1.1",
   "publisher": "labs-synapse",
   "icon": "icon.png",
@@ -32,7 +32,12 @@
     "cline",
     "zed",
     "token-optimization",
-    "rule-sync"
+    "rule-sync",
+    "cross-ide",
+    "mcp-server",
+    "token-analysis",
+    "conflict-detection",
+    "rule-backup"
   ],
   "badges": [
     {
@@ -66,7 +71,8 @@
     "onCommand:synapse.ws.disconnect",
     "onCommand:synapse.importFromIDE",
     "onCommand:synapse.optimize",
-    "onCommand:synapse.backup"
+    "onCommand:synapse.backup",
+    "onCommand:synapse.cleanup"
   ],
   "main": "./out/extension.js",
   "contributes": {
@@ -145,6 +151,11 @@
         "command": "synapse.backup",
         "title": "Synapse: Manage Backups",
         "category": "Synapse"
+      },
+      {
+        "command": "synapse.cleanup",
+        "title": "Synapse: Cleanup / Uninstall",
+        "category": "Synapse"
       }
     ],
     "viewsContainers": {
@@ -222,8 +233,18 @@
         },
         "synapse.licenseApiUrl": {
           "type": "string",
-          "default": "https://www.labs-synapse.com",
+          "default": "https://labs-synapse.com",
           "description": "Base URL for license validation API (expects /api/validate)."
+        },
+        "synapse.proPriceLabel": {
+          "type": "string",
+          "default": "",
+          "description": "Optional override for the Pro price label shown in the UI (e.g. \"$9\")."
+        },
+        "synapse.proTermsLabel": {
+          "type": "string",
+          "default": "",
+          "description": "Optional override for the Pro terms label shown in the UI (e.g. \"One-time payment • Lifetime license\")."
         }
       }
     }

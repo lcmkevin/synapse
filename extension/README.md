@@ -12,8 +12,9 @@ Stop copying rules between IDEs. Synapse compiles a single `.synapse` format to:
 
 - ✅ Trae (`.trae/`)
 - ✅ Cursor (`.cursor/rules/`)
-- 🧩 Windsurf (planned)
-- 🧩 Cline (planned)
+- ✅ Windsurf (`.windsurf/`)
+- ✅ Cline (`.clinerules/`)
+- ✅ Zed (`.rules`)
 
 ## Features
 
@@ -29,9 +30,9 @@ Compile `.synapse/rules/*.synapse` into enabled IDE targets.
 
 A sidebar dashboard that highlights total tokens, top expensive rules, and recommendations.
 
-### 👥 Team Sync (Pro)
+### 👥 Team Sync (Coming soon)
 
-Unlock Pro features via license key (MVP gate).
+Reserved for a future release.
 
 ## Quick Start
 
@@ -50,9 +51,9 @@ Unlock Pro features via license key (MVP gate).
 
 ## Pricing
 
-- Free: 2 IDE targets, basic token analysis
-- Pro ($9/mo): Unlimited IDEs, auto-convert to skills, analytics
-- Team ($49/mo): Team sync, audit logs, SSO
+- Free: manual downloads for 5 IDE adapters
+- Pro ($9 one-time): One-click adapter updates, rollback, and future IDE adapters
+- Team: Coming soon
 
 ## Links
 
