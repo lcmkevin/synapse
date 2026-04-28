@@ -29,7 +29,8 @@ function buildSuccessUrlWithAccessToken(urlString, accessToken) {
     hashParams.delete("session_id");
     hashParams.set("token", accessToken);
     u.hash = hashParams.toString();
-    return u.toString();
+    const encodedPlaceholder = encodeURIComponent(placeholder);
+    return u.toString().split(encodedPlaceholder).join(placeholder);
   } catch {
     return urlString;
   }
