@@ -1,4 +1,5 @@
 <!-- NEW: User guide created to document competitive advantages -->
+
 # Synapse User Guide
 
 ## Installation
@@ -63,3 +64,7 @@ Import existing rules from supported IDE folders into Synapse format, then sync 
 synapse importFromIDE
 synapse sync --target cursor
 ```
+
+## 6. License Diagnostics
+
+![alt text](image.png)

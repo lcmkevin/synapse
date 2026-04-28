@@ -653,8 +653,17 @@ Use meaningful variable names
     terminal.sendText(`synapse backup restore --backup ${name}`);
   }));
 
-  const detectCommand = vscode.commands.registerCommand("synapse.detect", safeCommand("Detect Conflicts", async () => { // NEW:
-    vscode.window.showInformationMessage("Synapse: Detect Conflicts (coming soon)");
+  const detectCommand = vscode.commands.registerCommand("synapse.detect", safeCommand("Detect Conflicts", async () => {
+    const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+    if (!workspaceRoot) {
+      vscode.window.showErrorMessage("Open a workspace first");
+      return;
+    }
+
+    const terminal = vscode.window.createTerminal("Synapse Conflicts");
+    terminal.show();
+    terminal.sendText(`cd "${workspaceRoot}"`);
+    terminal.sendText("synapse optimize --backup");
   }));
 
   const wsConnectCommand = vscode.commands.registerCommand("synapse.ws.connect", safeCommand("WS Connect", async () => {
