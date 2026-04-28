@@ -199,6 +199,7 @@ async function upsertLicense(record) {
       `DB write failed (${status})${json && typeof json === "object" && json.message ? `: ${json.message}` : ""}`
     );
   }
+  return { status };
 }
 
 function isPaidCheckoutSession(session) {
@@ -216,9 +217,11 @@ function isValidCheckoutSessionId(sessionId) {
 
 async function handler(req, res) {
   try {
+    const cfgAtStart = getSupabaseConfig();
+    const requestId = crypto.randomBytes(8).toString("hex");
     const apiKey = process.env.STRIPE_SECRET_KEY;
     if (!apiKey) return res.status(500).json({ ok: false, error: "Server misconfigured" });
-    if (!getSupabaseConfig()) return res.status(500).json({ ok: false, error: "Server misconfigured" });
+    if (!cfgAtStart) return res.status(500).json({ ok: false, error: "Server misconfigured" });
 
     const sessionIdFromQuery = getSessionId(req);
     const tokenFromQuery = getAccessToken(req);
@@ -234,6 +237,20 @@ async function handler(req, res) {
     }
     const token = tokenFromQuery || tokenFromBody;
     const requestedEmail = normalizeEmail(emailFromQuery || emailFromBody);
+    console.log("[license-by-session] start", {
+      requestId,
+      vercelEnv: process.env.VERCEL_ENV || null,
+      sessionPrefix: sessionId.slice(0, 10),
+      hasToken: !!token,
+      hasEmail: !!requestedEmail,
+      supabaseHost: (() => {
+        try {
+          return cfgAtStart ? new URL(cfgAtStart.url).host : null;
+        } catch {
+          return null;
+        }
+      })(),
+    });
 
     const { status, json } = await stripeRequest({ apiKey, method: "GET", pathname: `/v1/checkout/sessions/${encodeURIComponent(sessionId)}` });
     if (!(status >= 200 && status < 300) || !json || !isPaidCheckoutSession(json)) {
@@ -251,6 +268,7 @@ async function handler(req, res) {
 
     const existing = await findLicenseByCheckoutSessionId(sessionId);
     if (existing?.license_key) {
+      console.log("[license-by-session] existing", { requestId, sessionPrefix: sessionId.slice(0, 10) });
       return res.status(200).json({
         ok: true,
         licenseKey: existing.license_key,
@@ -271,7 +289,7 @@ async function handler(req, res) {
 
     const licenseKey = generateLicenseKey();
     try {
-      await upsertLicense({
+      const writeResult = await upsertLicense({
         license_key: licenseKey,
         email,
         plan: licensePlan,
@@ -283,6 +301,7 @@ async function handler(req, res) {
         stripe_payment_intent_id: paymentIntentId,
         stripe_price_id: stripePriceId,
       });
+      console.log("[license-by-session] wrote", { requestId, sessionPrefix: sessionId.slice(0, 10), status: writeResult.status });
     } catch (e) {
       console.error("[license-by-session] db write failed", {
         hasEmail: !!email,
@@ -308,6 +327,7 @@ async function handler(req, res) {
       console.error("[license-by-session] db row missing after write", { sessionId });
       return res.status(500).json({ ok: false, error: "Server error" });
     }
+    console.log("[license-by-session] created", { requestId, sessionPrefix: sessionId.slice(0, 10) });
 
     return res.status(200).json({
       ok: true,
