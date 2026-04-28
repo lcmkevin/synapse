@@ -2,6 +2,14 @@ const crypto = require("crypto");
 const http = require("http");
 const https = require("https");
 
+function maskEmail(email) {
+  const e = typeof email === "string" ? email.trim() : "";
+  if (!e.includes("@")) return "";
+  const [local, domain] = e.split("@");
+  const safeLocal = local.length <= 2 ? local[0] + "*" : local[0] + "*".repeat(Math.min(6, local.length - 2)) + local[local.length - 1];
+  return `${safeLocal}@${domain}`;
+}
+
 function generateLicenseKey() {
   const LICENSE_SECRET = process.env.LICENSE_SECRET ?? process.env.LICENSE_SALT;
   if (!LICENSE_SECRET) throw new Error("LICENSE_SECRET is required");
@@ -37,14 +45,21 @@ function getEmailConfig() {
 
 async function sendLicenseEmail({ to, licenseKey, planCode, reason }) {
   const cfg = getEmailConfig();
-  if (!cfg) return { ok: false, skipped: true };
+  if (!cfg) {
+    console.error("[license-email] missing SMTP_* or EMAIL_FROM env vars");
+    return { ok: false, skipped: true };
+  }
   const email = typeof to === "string" ? to.trim() : "";
-  if (!email) return { ok: false, skipped: true };
+  if (!email) {
+    console.error("[license-email] missing recipient email");
+    return { ok: false, skipped: true };
+  }
 
   let nodemailer;
   try {
     nodemailer = require("nodemailer");
   } catch {
+    console.error("[license-email] nodemailer not available in runtime");
     return { ok: false, skipped: true };
   }
 
@@ -82,7 +97,16 @@ async function sendLicenseEmail({ to, licenseKey, planCode, reason }) {
       text: lines.join("\n"),
     });
     return { ok: true };
-  } catch {
+  } catch (err) {
+    console.error("[license-email] send failed", {
+      to: maskEmail(email),
+      host: cfg.host,
+      port: cfg.port,
+      secure: cfg.secure,
+      code: err && typeof err === "object" ? err.code : undefined,
+      responseCode: err && typeof err === "object" ? err.responseCode : undefined,
+      command: err && typeof err === "object" ? err.command : undefined,
+    });
     return { ok: false };
   }
 }
