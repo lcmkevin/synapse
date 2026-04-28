@@ -206,6 +206,10 @@ function isPaidCheckoutSession(session) {
   return false;
 }
 
+function isValidCheckoutSessionId(sessionId) {
+  return typeof sessionId === "string" && sessionId.startsWith("cs_") && sessionId.length >= 10;
+}
+
 async function handler(req, res) {
   try {
     const apiKey = process.env.STRIPE_SECRET_KEY;
@@ -221,6 +225,9 @@ async function handler(req, res) {
     const emailFromQuery = typeof req?.query?.email === "string" ? req.query.email : "";
     const sessionId = sessionIdFromQuery || sessionIdFromBody;
     if (!sessionId) return res.status(400).json({ ok: false, error: "session_id required" });
+    if (!isValidCheckoutSessionId(sessionId) || sessionId.includes("{CHECKOUT_SESSION_ID}")) {
+      return res.status(400).json({ ok: false, error: "Invalid session_id" });
+    }
     const token = tokenFromQuery || tokenFromBody;
     const requestedEmail = normalizeEmail(emailFromQuery || emailFromBody);
 

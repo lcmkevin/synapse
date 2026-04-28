@@ -134,6 +134,10 @@
         return { sessionId, token };
       }
 
+      function isValidCheckoutSessionId(sessionId) {
+        return typeof sessionId === "string" && sessionId.startsWith("cs_") && sessionId.length >= 10;
+      }
+
       function clearUrlSecrets() {
         try {
           const url = new URL(window.location.href);
@@ -171,6 +175,10 @@
         initialToken = token;
         if (initialSessionId || initialToken) clearUrlSecrets();
         if (!sessionId) return;
+        if (!isValidCheckoutSessionId(sessionId) || sessionId.includes("{CHECKOUT_SESSION_ID}")) {
+          setKeyMsg("Checkout session missing or invalid. Please refresh this page from your Stripe receipt.", "error");
+          return;
+        }
         if (!token && legacyBox) legacyBox.style.display = "block";
         if (!token) {
           setKeyMsg("Check your email for the license key, or enter your email below to retrieve it.", "info");
@@ -216,6 +224,10 @@
             setKeyMsg("Email is required.", "error");
             return;
           }
+          if (!isValidCheckoutSessionId(sessionId) || sessionId.includes("{CHECKOUT_SESSION_ID}")) {
+            setKeyMsg("Checkout session missing or invalid. Please refresh this page from your Stripe receipt.", "error");
+            return;
+          }
           setKeyMsg("Retrieving your license…", "info");
           const key = await fetchKey({ sessionId, token: "", email });
           if (key) {
@@ -223,7 +235,7 @@
             if (keyBox) keyBox.style.display = "block";
             if (legacyBox) legacyBox.style.display = "none";
             setKeyMsg("", "");
-          clearUrlSecrets();
+            clearUrlSecrets();
             return;
           }
           setKeyMsg("Could not retrieve a license for that session/email. Use “Resend license email” or contact support.", "error");
