@@ -184,7 +184,7 @@ async function upsertLicense(record) {
   const cfg = getSupabaseConfig();
   if (!cfg) throw new Error("DB not configured");
   const url = `${cfg.url}/rest/v1/licenses?on_conflict=license_key`;
-  const { status } = await requestJson({
+  const { status, json } = await requestJson({
     method: "POST",
     urlString: url,
     headers: {
@@ -194,7 +194,11 @@ async function upsertLicense(record) {
     },
     body: record,
   });
-  if (!(status === 201 || status === 200 || status === 204)) throw new Error("DB write failed");
+  if (!(status === 201 || status === 200 || status === 204)) {
+    throw new Error(
+      `DB write failed (${status})${json && typeof json === "object" && json.message ? `: ${json.message}` : ""}`
+    );
+  }
 }
 
 function isPaidCheckoutSession(session) {
@@ -287,12 +291,23 @@ async function handler(req, res) {
         hasPaymentIntentId: !!paymentIntentId,
         hasSubscriptionId: !!subscriptionId,
         message: e && typeof e === "object" ? e.message : undefined,
+        supabaseHost: (() => {
+          try {
+            const cfg = getSupabaseConfig();
+            return cfg ? new URL(cfg.url).host : null;
+          } catch {
+            return null;
+          }
+        })(),
       });
       throw e;
     }
 
     const created = await findLicenseByCheckoutSessionId(sessionId);
-    if (!created?.license_key) return res.status(500).json({ ok: false, error: "Server error" });
+    if (!created?.license_key) {
+      console.error("[license-by-session] db row missing after write", { sessionId });
+      return res.status(500).json({ ok: false, error: "Server error" });
+    }
 
     return res.status(200).json({
       ok: true,
