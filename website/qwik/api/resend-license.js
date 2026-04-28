@@ -41,16 +41,22 @@ function getEmailConfig() {
   const from = process.env.EMAIL_FROM;
   const replyTo = process.env.EMAIL_REPLY_TO;
   const secureRaw = process.env.SMTP_SECURE;
+  const requireTlsRaw = process.env.SMTP_REQUIRE_TLS;
+  const rejectUnauthorizedRaw = process.env.SMTP_TLS_REJECT_UNAUTHORIZED;
 
   if (!host || !portRaw || !user || !pass || !from) return null;
   const port = Number(portRaw);
   if (!Number.isFinite(port) || port <= 0) return null;
   const secure = typeof secureRaw === "string" ? secureRaw.trim().toLowerCase() === "true" : port === 465;
+  const requireTLS = typeof requireTlsRaw === "string" ? requireTlsRaw.trim().toLowerCase() === "true" : false;
+  const tlsRejectUnauthorized = typeof rejectUnauthorizedRaw === "string" ? rejectUnauthorizedRaw.trim().toLowerCase() !== "false" : true;
 
   return {
     host,
     port,
     secure,
+    requireTLS,
+    tlsRejectUnauthorized,
     user,
     pass,
     from,
@@ -117,6 +123,8 @@ async function sendLicenseEmail({ to, licenseKey, planCode, reason }) {
     host: cfg.host,
     port: cfg.port,
     secure: cfg.secure,
+    requireTLS: cfg.requireTLS,
+    tls: { rejectUnauthorized: cfg.tlsRejectUnauthorized },
     auth: { user: cfg.user, pass: cfg.pass },
   });
 
