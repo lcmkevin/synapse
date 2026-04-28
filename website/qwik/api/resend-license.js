@@ -1,4 +1,10 @@
 const https = require("https");
+let nodemailer = null;
+try {
+  nodemailer = require("nodemailer");
+} catch {
+  nodemailer = null;
+}
 
 function maskEmail(email) {
   const e = typeof email === "string" ? email.trim() : "";
@@ -103,20 +109,17 @@ async function sendLicenseEmail({ to, licenseKey, planCode, reason }) {
   const cfg = getEmailConfig();
   if (!cfg) {
     console.error("[license-email] missing SMTP_* or EMAIL_FROM env vars");
-    return { ok: false, skipped: true };
+    return { ok: false, skipped: true, errorCode: "missing_smtp_config" };
   }
   const email = typeof to === "string" ? to.trim() : "";
   if (!email) {
     console.error("[license-email] missing recipient email");
-    return { ok: false, skipped: true };
+    return { ok: false, skipped: true, errorCode: "missing_recipient" };
   }
 
-  let nodemailer;
-  try {
-    nodemailer = require("nodemailer");
-  } catch {
+  if (!nodemailer) {
     console.error("[license-email] nodemailer not available in runtime");
-    return { ok: false, skipped: true };
+    return { ok: false, skipped: true, errorCode: "nodemailer_missing" };
   }
 
   const transporter = nodemailer.createTransport({
@@ -162,7 +165,7 @@ async function sendLicenseEmail({ to, licenseKey, planCode, reason }) {
       responseCode: err && typeof err === "object" ? err.responseCode : undefined,
       command: err && typeof err === "object" ? err.command : undefined,
     });
-    return { ok: false };
+    return { ok: false, errorCode: "send_failed" };
   }
 }
 
@@ -174,6 +177,8 @@ async function handleResend(req, res) {
     const body = await readJsonBody(req);
     const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
     if (!email) return res.status(400).json({ ok: false, error: "Email required" });
+    const emailConfigured = !!getEmailConfig();
+    const nodemailerAvailable = !!nodemailer;
 
     const url = new URL(`${cfg.url}/rest/v1/licenses`);
     url.searchParams.set("select", "license_key,email,status,plan_code");
@@ -193,7 +198,7 @@ async function handleResend(req, res) {
       await sendLicenseEmail({ to: email, licenseKey: license.license_key, planCode: license.plan_code, reason: "resend" });
     }
 
-    return res.status(200).json({ ok: true });
+    return res.status(200).json({ ok: true, emailConfigured, nodemailerAvailable });
   } catch {
     return res.status(500).json({ ok: false, error: "Server error" });
   }

@@ -1,5 +1,11 @@
 const crypto = require("crypto");
 const https = require("https");
+let nodemailer = null;
+try {
+  nodemailer = require("nodemailer");
+} catch {
+  nodemailer = null;
+}
 
 function readJsonBody(req) {
   return new Promise((resolve) => {
@@ -24,6 +30,99 @@ function getSupabaseConfig() {
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !key) return null;
   return { url: url.replace(/\/+$/, ""), key };
+}
+
+function getEmailConfig() {
+  const host = process.env.SMTP_HOST;
+  const portRaw = process.env.SMTP_PORT;
+  const user = process.env.SMTP_USER;
+  const pass = process.env.SMTP_PASS;
+  const from = process.env.EMAIL_FROM;
+  const replyTo = process.env.EMAIL_REPLY_TO;
+  const secureRaw = process.env.SMTP_SECURE;
+  const requireTlsRaw = process.env.SMTP_REQUIRE_TLS;
+  const rejectUnauthorizedRaw = process.env.SMTP_TLS_REJECT_UNAUTHORIZED;
+
+  if (!host || !portRaw || !user || !pass || !from) return null;
+  const port = Number(portRaw);
+  if (!Number.isFinite(port) || port <= 0) return null;
+  const secure = typeof secureRaw === "string" ? secureRaw.trim().toLowerCase() === "true" : port === 465;
+  const requireTLS = typeof requireTlsRaw === "string" ? requireTlsRaw.trim().toLowerCase() === "true" : false;
+  const tlsRejectUnauthorized = typeof rejectUnauthorizedRaw === "string" ? rejectUnauthorizedRaw.trim().toLowerCase() !== "false" : true;
+
+  return {
+    host,
+    port,
+    secure,
+    requireTLS,
+    tlsRejectUnauthorized,
+    user,
+    pass,
+    from,
+    replyTo: typeof replyTo === "string" && replyTo.trim() ? replyTo.trim() : undefined,
+  };
+}
+
+function maskEmail(email) {
+  const e = typeof email === "string" ? email.trim() : "";
+  if (!e.includes("@")) return "";
+  const [local, domain] = e.split("@");
+  const safeLocal = local.length <= 2 ? local[0] + "*" : local[0] + "*".repeat(Math.min(6, local.length - 2)) + local[local.length - 1];
+  return `${safeLocal}@${domain}`;
+}
+
+async function sendLicenseEmail({ to, licenseKey, planCode, reason }) {
+  const cfg = getEmailConfig();
+  if (!cfg) return { ok: false, skipped: true };
+  if (!nodemailer) return { ok: false, skipped: true };
+  const email = typeof to === "string" ? to.trim() : "";
+  if (!email) return { ok: false, skipped: true };
+
+  const transporter = nodemailer.createTransport({
+    host: cfg.host,
+    port: cfg.port,
+    secure: cfg.secure,
+    requireTLS: cfg.requireTLS,
+    tls: { rejectUnauthorized: cfg.tlsRejectUnauthorized },
+    auth: { user: cfg.user, pass: cfg.pass },
+  });
+
+  const subject = "Your Synapse Pro license key";
+  const lines = [];
+  lines.push("Thanks for purchasing Synapse Pro.");
+  lines.push("");
+  lines.push(`Plan: ${planCode || "pro_lifetime"}`);
+  lines.push(`License key: ${licenseKey}`);
+  lines.push("");
+  lines.push("Activate:");
+  lines.push("1) synapse enter-license");
+  lines.push("2) paste your key");
+  if (reason) {
+    lines.push("");
+    lines.push(`Reason: ${reason}`);
+  }
+
+  try {
+    await transporter.sendMail({
+      from: cfg.from,
+      to: email,
+      replyTo: cfg.replyTo,
+      subject,
+      text: lines.join("\n"),
+    });
+    return { ok: true };
+  } catch (err) {
+    console.error("[license-email] send failed", {
+      to: maskEmail(email),
+      host: cfg.host,
+      port: cfg.port,
+      secure: cfg.secure,
+      code: err && typeof err === "object" ? err.code : undefined,
+      responseCode: err && typeof err === "object" ? err.responseCode : undefined,
+      command: err && typeof err === "object" ? err.command : undefined,
+    });
+    return { ok: false };
+  }
 }
 
 function requestJson({ method, urlString, headers, body }) {
@@ -328,6 +427,14 @@ async function handler(req, res) {
       return res.status(500).json({ ok: false, error: "Server error" });
     }
     console.log("[license-by-session] created", { requestId, sessionPrefix: sessionId.slice(0, 10) });
+
+    if (email) {
+      try {
+        await sendLicenseEmail({ to: email, licenseKey: created.license_key, planCode, reason: "purchase" });
+      } catch {
+        void 0;
+      }
+    }
 
     return res.status(200).json({
       ok: true,

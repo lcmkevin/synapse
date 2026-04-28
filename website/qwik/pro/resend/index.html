@@ -99,6 +99,24 @@
             body: JSON.stringify({ email }),
           });
           if (resp.status === 200) {
+            const text = await resp.text();
+            const data = (() => {
+              try {
+                return text ? JSON.parse(text) : null;
+              } catch {
+                return null;
+              }
+            })();
+            const emailConfigured = !!(data && data.emailConfigured);
+            const nodemailerAvailable = !!(data && data.nodemailerAvailable);
+            if (!emailConfigured) {
+              setMsg("Email is not configured on the server yet. Set SMTP_* and EMAIL_FROM in Vercel env vars.", "error");
+              return;
+            }
+            if (!nodemailerAvailable) {
+              setMsg("Email backend dependency is missing (nodemailer). Ensure production dependencies are installed in the deployment.", "error");
+              return;
+            }
             setMsg("If an active license exists for this email, it has been sent.", "ok");
             return;
           }
