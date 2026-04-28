@@ -104,6 +104,8 @@
       const legacyBox = document.getElementById("legacyBox");
       const legacyEmail = document.getElementById("legacyEmail");
       const legacyBtn = document.getElementById("legacyBtn");
+      let initialSessionId = "";
+      let initialToken = "";
 
       function setKeyMsg(msg, kind) {
         if (!keyMsg) return;
@@ -127,18 +129,33 @@
         const url = new URL(window.location.href);
         const hash = typeof window.location.hash === "string" ? window.location.hash : "";
         const hashParams = new URLSearchParams(hash.startsWith("#") ? hash.slice(1) : hash);
-        const sessionId = (hashParams.get("session_id") || url.searchParams.get("session_id") || "").trim();
+        const sessionId = (url.searchParams.get("session_id") || hashParams.get("session_id") || "").trim();
         const token = (hashParams.get("token") || "").trim();
         return { sessionId, token };
       }
 
+      function clearUrlSecrets() {
+        try {
+          const url = new URL(window.location.href);
+          url.searchParams.delete("session_id");
+          url.hash = "";
+          window.history.replaceState(null, "", url.toString());
+        } catch {
+          void 0;
+        }
+      }
+
       async function fetchKey({ sessionId, token, email }) {
         try {
-          const qs = new URLSearchParams();
-          qs.set("session_id", sessionId);
-          if (token) qs.set("token", token);
-          if (email) qs.set("email", email);
-          const resp = await fetch(`/api/license-by-session?${qs.toString()}`);
+          const resp = await fetch("/api/license-by-session", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              session_id: sessionId,
+              token: token || "",
+              email: email || "",
+            }),
+          });
           if (resp.status !== 200) return null;
           const data = await resp.json();
           const licenseKey = data && typeof data.licenseKey === "string" ? data.licenseKey : "";
@@ -150,6 +167,9 @@
 
       async function initKey() {
         const { sessionId, token } = readParams();
+        initialSessionId = sessionId;
+        initialToken = token;
+        if (initialSessionId || initialToken) clearUrlSecrets();
         if (!sessionId) return;
         if (!token && legacyBox) legacyBox.style.display = "block";
         if (!token) {
@@ -165,6 +185,7 @@
             if (keyEl) keyEl.textContent = key;
             if (keyBox) keyBox.style.display = "block";
             setKeyMsg("", "");
+            clearUrlSecrets();
             if (copyBtn) {
               copyBtn.addEventListener("click", async () => {
                 try {
@@ -189,7 +210,7 @@
 
       if (legacyBtn) {
         legacyBtn.addEventListener("click", async () => {
-          const { sessionId } = readParams();
+          const sessionId = initialSessionId;
           const email = legacyEmail && typeof legacyEmail.value === "string" ? legacyEmail.value.trim().toLowerCase() : "";
           if (!sessionId || !email) {
             setKeyMsg("Email is required.", "error");
@@ -202,6 +223,7 @@
             if (keyBox) keyBox.style.display = "block";
             if (legacyBox) legacyBox.style.display = "none";
             setKeyMsg("", "");
+          clearUrlSecrets();
             return;
           }
           setKeyMsg("Could not retrieve a license for that session/email. Use “Resend license email” or contact support.", "error");

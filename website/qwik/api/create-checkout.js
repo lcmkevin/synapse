@@ -23,13 +23,10 @@ function buildSuccessUrlWithAccessToken(urlString, accessToken) {
   try {
     const u = new URL(urlString);
     const placeholder = "{CHECKOUT_SESSION_ID}";
-    const querySessionId = u.searchParams.get("session_id");
-    if (querySessionId === placeholder) u.searchParams.delete("session_id");
+    u.searchParams.set("session_id", placeholder);
 
     const hashParams = new URLSearchParams(u.hash && u.hash.startsWith("#") ? u.hash.slice(1) : "");
-    if (!hashParams.get("session_id") && (querySessionId === placeholder || u.toString().includes(placeholder))) {
-      hashParams.set("session_id", placeholder);
-    }
+    hashParams.delete("session_id");
     hashParams.set("token", accessToken);
     u.hash = hashParams.toString();
     return u.toString();
