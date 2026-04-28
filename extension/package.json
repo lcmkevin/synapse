@@ -149,7 +149,7 @@
       },
       {
         "command": "synapse.backup",
-        "title": "Synapse: Manage Backups",
+        "title": "Synapse: Backup",
         "category": "Synapse"
       },
       {
@@ -230,6 +230,16 @@
           "type": "boolean",
           "default": false,
           "description": "When enabled, also generate a root .rules file for Zed (auto-included in Zed Agent)."
+        },
+        "synapse.autoBackupBeforeSync": {
+          "type": "boolean",
+          "default": true,
+          "description": "Create a local backup before syncing rules (stored under ~/.synapse/backups)."
+        },
+        "synapse.backupRetention": {
+          "type": "number",
+          "default": 3,
+          "description": "How many backups to keep (0 disables pruning)."
         },
         "synapse.licenseApiUrl": {
           "type": "string",

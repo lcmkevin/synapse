@@ -17,6 +17,60 @@ import { UNINSTALL_FEEDBACK_URL } from "./product";
 let tokenCounter: TokenCounter | null = null;
 let cleanupContext: vscode.ExtensionContext | null = null;
 
+function backupRootDir(): string {
+  return path.join(os.homedir(), ".synapse", "backups");
+}
+
+async function ensureDir(p: string): Promise<void> {
+  await fs.mkdir(p, { recursive: true });
+}
+
+async function listBackups(): Promise<string[]> {
+  try {
+    const entries = await fs.readdir(backupRootDir());
+    return entries.filter((b) => b.startsWith("backup_")).sort().reverse();
+  } catch {
+    return [];
+  }
+}
+
+async function pruneBackups(maxKeep: number): Promise<void> {
+  const keep = Number.isFinite(maxKeep) ? Math.max(0, Math.floor(maxKeep)) : 0;
+  if (keep <= 0) return;
+  const backups = await listBackups();
+  const extra = backups.slice(keep);
+  for (const name of extra) {
+    try {
+      await fs.rm(path.join(backupRootDir(), name), { recursive: true, force: true });
+    } catch {
+      void 0;
+    }
+  }
+}
+
+async function createBackup(workspaceRoot: string, retention: number): Promise<string> {
+  const synapsePath = path.join(workspaceRoot, ".synapse");
+  const ok = await fsPathExists(synapsePath);
+  if (!ok) throw new Error("Missing .synapse/ in workspace");
+
+  const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const folderName = `backup_${timestamp}`;
+  const backupFolder = path.join(backupRootDir(), folderName);
+  await ensureDir(backupFolder);
+  await fs.cp(synapsePath, backupFolder, { recursive: true });
+  await pruneBackups(retention);
+  return backupFolder;
+}
+
+async function restoreBackupByName(name: string, workspaceRoot: string): Promise<void> {
+  const backupPath = path.join(backupRootDir(), name);
+  const ok = await fsPathExists(backupPath);
+  if (!ok) throw new Error("Backup not found");
+  const targetPath = path.join(workspaceRoot, ".synapse");
+  await fs.rm(targetPath, { recursive: true, force: true });
+  await fs.cp(backupPath, targetPath, { recursive: true });
+}
+
 async function fsPathExists(p: string): Promise<boolean> {
   try {
     await fs.access(p);
@@ -392,6 +446,19 @@ Use meaningful variable names
       selectedRuleIds = picked.map((p) => path.basename(p.label, ".synapse"));
     }
 
+    const autoBackup = config.get<boolean>("autoBackupBeforeSync", true);
+    const retention = config.get<number>("backupRetention", 3);
+    if (autoBackup) {
+      try {
+        const backupPath = await createBackup(workspaceRoot, retention);
+        vscode.window.showInformationMessage(`📦 Backup saved: ${path.basename(backupPath)}`);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        const proceed = await vscode.window.showWarningMessage(`Backup failed (${msg}). Continue sync?`, "Continue", "Cancel");
+        if (proceed !== "Continue") return;
+      }
+    }
+
     const zedMode = config.get<boolean>("zedMode", false);
     const allowedTargets = zedMode ? [...activeTargets, "zed"] : activeTargets;
     await adapterManager.syncAllRules(workspaceRoot, { allowedTargets, conflictMode, selectedRuleIds });
@@ -574,6 +641,11 @@ Use meaningful variable names
   }));
 
   const upgradeProCommand = vscode.commands.registerCommand("synapse.upgradePro", safeCommand("Upgrade To Pro", async () => {
+    if (license.isProUser()) {
+      const choice = await vscode.window.showInformationMessage("✅ Synapse Pro is already active on this machine.", "License Diagnostics");
+      if (choice === "License Diagnostics") await vscode.commands.executeCommand("synapse.licenseDiagnostics");
+      return;
+    }
     await license.showUpgradePrompt();
     skillConverter = new SkillConverter(context);
   }));
@@ -636,21 +708,52 @@ Use meaningful variable names
       return;
     }
 
-    const action = await vscode.window.showQuickPick(["List Backups", "Restore Backup"], { placeHolder: "Backup action" });
+    const config = vscode.workspace.getConfiguration("synapse");
+    const retention = config.get<number>("backupRetention", 3);
+    const action = await vscode.window.showQuickPick(["Create Backup", "List Backups", "Restore Backup"], { placeHolder: "Backup action" });
     if (!action) return;
 
-    const terminal = vscode.window.createTerminal("Synapse Backups");
-    terminal.show();
-    terminal.sendText(`cd "${workspaceRoot}"`);
-
-    if (action === "List Backups") {
-      terminal.sendText("synapse backup list");
+    if (action === "Create Backup") {
+      try {
+        const backupPath = await createBackup(workspaceRoot, retention);
+        vscode.window.showInformationMessage(`📦 Backup saved: ${path.basename(backupPath)}`);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        vscode.window.showErrorMessage(`Backup failed: ${msg}`);
+      }
       return;
     }
 
-    const name = await vscode.window.showInputBox({ prompt: "Backup name (e.g., backup_2026-04-22T...)" });
-    if (!name) return;
-    terminal.sendText(`synapse backup restore --backup ${name}`);
+    if (action === "List Backups") {
+      const backups = await listBackups();
+      if (backups.length === 0) {
+        vscode.window.showInformationMessage("📦 No backups found yet.");
+        return;
+      }
+      const picked = await vscode.window.showQuickPick(backups.map((b) => ({ label: b })), { placeHolder: "Backups (newest first)" });
+      if (picked?.label) {
+        await vscode.env.clipboard.writeText(picked.label);
+        vscode.window.showInformationMessage("Copied backup name to clipboard.");
+      }
+      return;
+    }
+
+    const backups = await listBackups();
+    if (backups.length === 0) {
+      vscode.window.showErrorMessage("No backups found.");
+      return;
+    }
+    const picked = await vscode.window.showQuickPick(backups.map((b) => ({ label: b })), { placeHolder: "Select a backup to restore" });
+    if (!picked?.label) return;
+    const confirm = await vscode.window.showWarningMessage(`Restore "${picked.label}"? This overwrites current .synapse/`, "Restore", "Cancel");
+    if (confirm !== "Restore") return;
+    try {
+      await restoreBackupByName(picked.label, workspaceRoot);
+      vscode.window.showInformationMessage("✅ Backup restored. Run Sync Rules to regenerate outputs.");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      vscode.window.showErrorMessage(`Restore failed: ${msg}`);
+    }
   }));
 
   const detectCommand = vscode.commands.registerCommand("synapse.detect", safeCommand("Detect Conflicts", async () => {

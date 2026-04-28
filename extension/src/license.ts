@@ -14,6 +14,7 @@ export class LicenseManager {
   private static instance: LicenseManager;
   private context: vscode.ExtensionContext | null = null;
   private isPro: boolean = false;
+  private ready: Promise<void> | null = null;
 
   static getInstance(): LicenseManager {
     if (!LicenseManager.instance) {
@@ -24,7 +25,7 @@ export class LicenseManager {
 
   initialize(context: vscode.ExtensionContext): void {
     this.context = context;
-    void this.loadSavedLicense();
+    this.ready = this.loadSavedLicense();
   }
 
   private getApiBaseUrl(): string {
@@ -134,6 +135,15 @@ export class LicenseManager {
   }
 
   async showUpgradePrompt(): Promise<void> {
+    try {
+      await (this.ready || this.loadSavedLicense());
+    } catch {
+      void 0;
+    }
+    if (this.isPro) {
+      vscode.window.showInformationMessage("✅ Synapse Pro is already active on this machine.");
+      return;
+    }
     const priceLabel = getProPriceLabel();
     const termsLabel = getProTermsLabel();
     const choice = await vscode.window.showInformationMessage(

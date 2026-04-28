@@ -114,7 +114,7 @@ export class TokenCounter {
       item.percentageOfTotal = totalTokens > 0 ? (item.tokens / totalTokens) * 100 : 0;
     }
 
-    const recommendations = this.generateRecommendations(breakdown, totalTokens);
+    const recommendations = this.generateRecommendations(breakdown, totalTokens, rules);
     const totalCost = (totalTokens / 1_000_000) * MODEL_RATES[model];
 
     return { totalTokens, totalCost, breakdown, recommendations };
@@ -126,7 +126,11 @@ export class TokenCounter {
     return undefined;
   }
 
-  private generateRecommendations(breakdown: RuleTokenBreakdown[], totalTokens: number): string[] {
+  private generateRecommendations(
+    breakdown: RuleTokenBreakdown[],
+    totalTokens: number,
+    rules: { name: string; content: string }[]
+  ): string[] {
     const recommendations: string[] = [];
     const largeRules = breakdown.filter((r) => r.tokens > 5000);
 
@@ -136,6 +140,20 @@ export class TokenCounter {
           totalTokens * 0.7
         ).toLocaleString()} tokens per session.`
       );
+    }
+
+    const allText = rules.map((r) => String(r.content || "")).join("\n\n").toLowerCase();
+    const hasTokenHygieneRule =
+      allText.includes("token") && (allText.includes("concise") || allText.includes("cost") || allText.includes("short"));
+    if (!hasTokenHygieneRule) {
+      recommendations.push("🧠 Best Practice: Add a token-hygiene rule (e.g., keep answers concise by default; expand only when asked).");
+    }
+
+    const hasDestructiveSafety =
+      (allText.includes("delete") || allText.includes("drop") || allText.includes("truncate")) &&
+      (allText.includes("confirm") || allText.includes("backup") || allText.includes("migration"));
+    if (!hasDestructiveSafety) {
+      recommendations.push("🛡️ Safety: Add a rule to prevent destructive operations (DB deletes/drops) without explicit confirmation and backups.");
     }
 
     const ext =
