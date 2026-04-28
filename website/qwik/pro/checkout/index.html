@@ -3,6 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="referrer" content="no-referrer" />
     <title>Synapse Pro Checkout</title>
     <meta name="description" content="Checkout for Synapse Pro. $9 one-time payment. No recurring fees." />
     <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400;14..32,500;14..32,600;14..32,700;14..32,800&display=swap" rel="stylesheet" />
@@ -114,7 +115,7 @@
             body: JSON.stringify({
               plan: "pro_lifetime",
               customerEmail: email,
-              success_url: `${baseUrl}/pro/success/?session_id={CHECKOUT_SESSION_ID}`,
+              success_url: `${baseUrl}/pro/success/#session_id={CHECKOUT_SESSION_ID}`,
               cancel_url: `${baseUrl}/pro/checkout/`,
             }),
           });

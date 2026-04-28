@@ -23,6 +23,6 @@ export function getProTermsLabel(): string {
 }
 
 export const PRO_LEARN_MORE_URL = `${DEFAULT_API_BASE_URL}/pro/`;
-export const PRO_CHECKOUT_SUCCESS_URL = `${DEFAULT_API_BASE_URL}/pro/success/?session_id={CHECKOUT_SESSION_ID}`;
+export const PRO_CHECKOUT_SUCCESS_URL = `${DEFAULT_API_BASE_URL}/pro/success/#session_id={CHECKOUT_SESSION_ID}`;
 export const PRO_CHECKOUT_CANCEL_URL = `${DEFAULT_API_BASE_URL}/pro/checkout`;
 export const UNINSTALL_FEEDBACK_URL = `${DEFAULT_API_BASE_URL}/uninstall-feedback`;

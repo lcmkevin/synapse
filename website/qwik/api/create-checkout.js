@@ -1,3 +1,4 @@
+const crypto = require("crypto");
 const https = require("https");
 
 function getStripeModeFromKey(apiKey) {
@@ -12,6 +13,29 @@ function getSupabaseConfig() {
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !key) return null;
   return { url: url.replace(/\/+$/, ""), key };
+}
+
+function makeCheckoutAccessToken() {
+  return crypto.randomBytes(16).toString("hex");
+}
+
+function buildSuccessUrlWithAccessToken(urlString, accessToken) {
+  try {
+    const u = new URL(urlString);
+    const placeholder = "{CHECKOUT_SESSION_ID}";
+    const querySessionId = u.searchParams.get("session_id");
+    if (querySessionId === placeholder) u.searchParams.delete("session_id");
+
+    const hashParams = new URLSearchParams(u.hash && u.hash.startsWith("#") ? u.hash.slice(1) : "");
+    if (!hashParams.get("session_id") && (querySessionId === placeholder || u.toString().includes(placeholder))) {
+      hashParams.set("session_id", placeholder);
+    }
+    hashParams.set("token", accessToken);
+    u.hash = hashParams.toString();
+    return u.toString();
+  } catch {
+    return urlString;
+  }
 }
 
 function supabaseRequestJson({ method, urlString, apiKey, body }) {
@@ -278,10 +302,12 @@ async function createCheckout(req, res) {
 
     const successUrl = requestedSuccessUrl || envSuccessUrl;
     const cancelUrl = requestedCancelUrl || envCancelUrl;
+    const accessToken = makeCheckoutAccessToken();
+    const successUrlWithToken = buildSuccessUrlWithAccessToken(successUrl, accessToken);
 
     const form = encodeForm({
       mode: checkoutMode,
-      success_url: successUrl,
+      success_url: successUrlWithToken,
       cancel_url: cancelUrl,
       "line_items[0][price]": priceId,
       "line_items[0][quantity]": 1,
@@ -292,6 +318,7 @@ async function createCheckout(req, res) {
       "metadata[plan_code]": effectivePlanCode,
       "metadata[license_plan]": planDef.license_plan,
       "metadata[stripe_price_id]": priceId,
+      "metadata[license_access_token]": accessToken,
     });
 
     const { status, json } = await stripeRequest({ apiKey, method: "POST", pathname: "/v1/checkout/sessions", body: form });

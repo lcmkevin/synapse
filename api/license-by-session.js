@@ -124,6 +124,28 @@ function getSessionId(req) {
   return fromUrl.trim();
 }
 
+function getAccessToken(req) {
+  const fromQuery = typeof req?.query?.token === "string" ? req.query.token.trim() : "";
+  if (fromQuery) return fromQuery;
+  const fromUrl =
+    typeof req?.url === "string"
+      ? (() => {
+          try {
+            return new URL(req.url, "https://localhost").searchParams.get("token") || "";
+          } catch {
+            return "";
+          }
+        })()
+      : "";
+  return fromUrl.trim();
+}
+
+function normalizeEmail(email) {
+  const e = typeof email === "string" ? email.trim().toLowerCase() : "";
+  if (!e || !e.includes("@")) return "";
+  return e;
+}
+
 async function findLicenseByCheckoutSessionId(checkoutSessionId) {
   const cfg = getSupabaseConfig();
   if (!cfg) return null;
@@ -191,14 +213,29 @@ async function handler(req, res) {
     if (!getSupabaseConfig()) return res.status(500).json({ ok: false, error: "Server misconfigured" });
 
     const sessionIdFromQuery = getSessionId(req);
+    const tokenFromQuery = getAccessToken(req);
     const body = sessionIdFromQuery ? null : await readJsonBody(req);
     const sessionIdFromBody = body && typeof body.session_id === "string" ? body.session_id.trim() : "";
+    const tokenFromBody = body && typeof body.token === "string" ? body.token.trim() : "";
+    const emailFromBody = body && typeof body.email === "string" ? body.email : "";
+    const emailFromQuery = typeof req?.query?.email === "string" ? req.query.email : "";
     const sessionId = sessionIdFromQuery || sessionIdFromBody;
     if (!sessionId) return res.status(400).json({ ok: false, error: "session_id required" });
+    const token = tokenFromQuery || tokenFromBody;
+    const requestedEmail = normalizeEmail(emailFromQuery || emailFromBody);
 
     const { status, json } = await stripeRequest({ apiKey, method: "GET", pathname: `/v1/checkout/sessions/${encodeURIComponent(sessionId)}` });
     if (!(status >= 200 && status < 300) || !json || !isPaidCheckoutSession(json)) {
       return res.status(404).json({ ok: false, error: "Not found" });
+    }
+
+    const expectedToken =
+      json?.metadata && typeof json.metadata === "object" && typeof json.metadata.license_access_token === "string" ? json.metadata.license_access_token.trim() : "";
+    if (expectedToken) {
+      if (!token || token !== expectedToken) return res.status(404).json({ ok: false, error: "Not found" });
+    } else {
+      const sessionEmail = normalizeEmail(json?.customer_details?.email || json?.customer_email || "");
+      if (!requestedEmail || !sessionEmail || requestedEmail !== sessionEmail) return res.status(404).json({ ok: false, error: "Not found" });
     }
 
     const existing = await findLicenseByCheckoutSessionId(sessionId);

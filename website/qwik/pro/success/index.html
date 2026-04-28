@@ -3,6 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="referrer" content="no-referrer" />
     <title>Payment Successful | Synapse Pro</title>
     <meta name="description" content="Synapse Pro payment successful. Activate your license key in the CLI." />
     <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400;14..32,500;14..32,600;14..32,700;14..32,800&display=swap" rel="stylesheet" />
@@ -37,6 +38,18 @@
             </div>
           </div>
           <div id="keyMsg" class="note" style="margin-top: 1rem; display: none"></div>
+          <div id="legacyBox" class="note" style="margin-top: 1rem; display: none">
+            <div class="muted" style="margin-bottom: 0.35rem">Enter the email used at checkout to retrieve your key</div>
+            <input
+              id="legacyEmail"
+              type="email"
+              placeholder="you@company.com"
+              style="width: 100%; padding: 0.6rem 0.75rem; border-radius: 12px; border: 1px solid var(--gray); font-size: 0.95rem"
+            />
+            <div class="hero-buttons" style="justify-content: flex-start; margin-top: 0.75rem">
+              <button id="legacyBtn" class="btn btn-outline">Retrieve key</button>
+            </div>
+          </div>
           <ol style="padding-left: 1.25rem; line-height: 1.8">
             <li>Check your email for the license key.</li>
             <li>Run <code>synapse enter-license</code> and paste your key.</li>
@@ -88,6 +101,9 @@
       const keyEl = document.getElementById("licenseKey");
       const copyBtn = document.getElementById("copyBtn");
       const keyMsg = document.getElementById("keyMsg");
+      const legacyBox = document.getElementById("legacyBox");
+      const legacyEmail = document.getElementById("legacyEmail");
+      const legacyBtn = document.getElementById("legacyBtn");
 
       function setKeyMsg(msg, kind) {
         if (!keyMsg) return;
@@ -107,9 +123,22 @@
         }
       }
 
-      async function fetchKey(sessionId) {
+      function readParams() {
+        const url = new URL(window.location.href);
+        const hash = typeof window.location.hash === "string" ? window.location.hash : "";
+        const hashParams = new URLSearchParams(hash.startsWith("#") ? hash.slice(1) : hash);
+        const sessionId = (hashParams.get("session_id") || url.searchParams.get("session_id") || "").trim();
+        const token = (hashParams.get("token") || "").trim();
+        return { sessionId, token };
+      }
+
+      async function fetchKey({ sessionId, token, email }) {
         try {
-          const resp = await fetch(`/api/license-by-session?session_id=${encodeURIComponent(sessionId)}`);
+          const qs = new URLSearchParams();
+          qs.set("session_id", sessionId);
+          if (token) qs.set("token", token);
+          if (email) qs.set("email", email);
+          const resp = await fetch(`/api/license-by-session?${qs.toString()}`);
           if (resp.status !== 200) return null;
           const data = await resp.json();
           const licenseKey = data && typeof data.licenseKey === "string" ? data.licenseKey : "";
@@ -120,14 +149,18 @@
       }
 
       async function initKey() {
-        const url = new URL(window.location.href);
-        const sessionId = url.searchParams.get("session_id") || "";
+        const { sessionId, token } = readParams();
         if (!sessionId) return;
+        if (!token && legacyBox) legacyBox.style.display = "block";
+        if (!token) {
+          setKeyMsg("Check your email for the license key, or enter your email below to retrieve it.", "info");
+          return;
+        }
 
         setKeyMsg("Generating your license…", "info");
         let tries = 0;
         while (tries < 10) {
-          const key = await fetchKey(sessionId);
+          const key = token ? await fetchKey({ sessionId, token }) : null;
           if (key) {
             if (keyEl) keyEl.textContent = key;
             if (keyBox) keyBox.style.display = "block";
@@ -149,7 +182,30 @@
           await new Promise((r) => setTimeout(r, 1200));
         }
 
-        setKeyMsg("License generation is taking longer than expected. Use “Resend license email” or refresh this page.", "error");
+        if (token) {
+          setKeyMsg("License generation is taking longer than expected. Use “Resend license email” or refresh this page.", "error");
+        }
+      }
+
+      if (legacyBtn) {
+        legacyBtn.addEventListener("click", async () => {
+          const { sessionId } = readParams();
+          const email = legacyEmail && typeof legacyEmail.value === "string" ? legacyEmail.value.trim().toLowerCase() : "";
+          if (!sessionId || !email) {
+            setKeyMsg("Email is required.", "error");
+            return;
+          }
+          setKeyMsg("Retrieving your license…", "info");
+          const key = await fetchKey({ sessionId, token: "", email });
+          if (key) {
+            if (keyEl) keyEl.textContent = key;
+            if (keyBox) keyBox.style.display = "block";
+            if (legacyBox) legacyBox.style.display = "none";
+            setKeyMsg("", "");
+            return;
+          }
+          setKeyMsg("Could not retrieve a license for that session/email. Use “Resend license email” or contact support.", "error");
+        });
       }
 
       void initKey();

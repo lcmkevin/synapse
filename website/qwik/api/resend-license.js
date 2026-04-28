@@ -1,5 +1,13 @@
 const https = require("https");
 
+function maskEmail(email) {
+  const e = typeof email === "string" ? email.trim() : "";
+  if (!e.includes("@")) return "";
+  const [local, domain] = e.split("@");
+  const safeLocal = local.length <= 2 ? local[0] + "*" : local[0] + "*".repeat(Math.min(6, local.length - 2)) + local[local.length - 1];
+  return `${safeLocal}@${domain}`;
+}
+
 function readJsonBody(req) {
   return new Promise((resolve) => {
     if (req?.body && typeof req.body === "object") return resolve(req.body);
@@ -87,14 +95,21 @@ function supabaseRequestJson({ method, urlString, apiKey }) {
 
 async function sendLicenseEmail({ to, licenseKey, planCode, reason }) {
   const cfg = getEmailConfig();
-  if (!cfg) return { ok: false, skipped: true };
+  if (!cfg) {
+    console.error("[license-email] missing SMTP_* or EMAIL_FROM env vars");
+    return { ok: false, skipped: true };
+  }
   const email = typeof to === "string" ? to.trim() : "";
-  if (!email) return { ok: false, skipped: true };
+  if (!email) {
+    console.error("[license-email] missing recipient email");
+    return { ok: false, skipped: true };
+  }
 
   let nodemailer;
   try {
     nodemailer = require("nodemailer");
   } catch {
+    console.error("[license-email] nodemailer not available in runtime");
     return { ok: false, skipped: true };
   }
 
@@ -120,15 +135,27 @@ async function sendLicenseEmail({ to, licenseKey, planCode, reason }) {
     lines.push(`Reason: ${reason}`);
   }
 
-  await transporter.sendMail({
-    from: cfg.from,
-    to: email,
-    replyTo: cfg.replyTo,
-    subject,
-    text: lines.join("\n"),
-  });
-
-  return { ok: true };
+  try {
+    await transporter.sendMail({
+      from: cfg.from,
+      to: email,
+      replyTo: cfg.replyTo,
+      subject,
+      text: lines.join("\n"),
+    });
+    return { ok: true };
+  } catch (err) {
+    console.error("[license-email] send failed", {
+      to: maskEmail(email),
+      host: cfg.host,
+      port: cfg.port,
+      secure: cfg.secure,
+      code: err && typeof err === "object" ? err.code : undefined,
+      responseCode: err && typeof err === "object" ? err.responseCode : undefined,
+      command: err && typeof err === "object" ? err.command : undefined,
+    });
+    return { ok: false };
+  }
 }
 
 async function handleResend(req, res) {
@@ -155,11 +182,7 @@ async function handleResend(req, res) {
     }
 
     if (license?.license_key) {
-      try {
-        await sendLicenseEmail({ to: email, licenseKey: license.license_key, planCode: license.plan_code, reason: "resend" });
-      } catch {
-        void 0;
-      }
+      await sendLicenseEmail({ to: email, licenseKey: license.license_key, planCode: license.plan_code, reason: "resend" });
     }
 
     return res.status(200).json({ ok: true });
