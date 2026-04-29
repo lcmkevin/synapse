@@ -1,4 +1,5 @@
 const fs = require("fs-extra");
+const http = require("http");
 const https = require("https");
 const os = require("os");
 const path = require("path");
@@ -28,40 +29,66 @@ async function loadSavedLicenseKey() {
 }
 
 function postJson(urlString, body) {
-  return new Promise((resolve, reject) => {
-    const url = new URL(urlString);
-    const payload = JSON.stringify(body || {});
-    const req = https.request(
-      {
-        protocol: url.protocol,
-        hostname: url.hostname,
-        port: url.port,
-        path: url.pathname + url.search,
-        method: "POST",
-        headers: {
-          Accept: "application/json",
-          "Content-Type": "application/json",
-          "Content-Length": Buffer.byteLength(payload),
+  const payload = JSON.stringify(body || {});
+  const maxRedirects = 5;
+
+  const doRequest = (u, redirectsLeft) => {
+    return new Promise((resolve, reject) => {
+      const url = new URL(u);
+      const lib = url.protocol === "http:" ? http : https;
+      const req = lib.request(
+        {
+          protocol: url.protocol,
+          hostname: url.hostname,
+          port: url.port,
+          path: url.pathname + url.search,
+          method: "POST",
+          headers: {
+            Accept: "application/json",
+            "Content-Type": "application/json",
+            "Content-Length": Buffer.byteLength(payload),
+          },
         },
-      },
-      (res) => {
-        let data = "";
-        res.on("data", (chunk) => (data += chunk.toString()));
-        res.on("end", () => {
-          const status = res.statusCode || 0;
-          try {
-            const json = data ? JSON.parse(data) : null;
+        (res) => {
+          let data = "";
+          res.on("data", (chunk) => (data += chunk.toString()));
+          res.on("end", async () => {
+            const status = res.statusCode || 0;
+            let json = null;
+            try {
+              json = data ? JSON.parse(data) : null;
+            } catch {
+              json = null;
+            }
+
+            if ([301, 302, 303, 307, 308].includes(status) && redirectsLeft > 0) {
+              const headerLoc = typeof res.headers?.location === "string" ? res.headers.location : "";
+              const jsonLoc = typeof json?.redirect === "string" ? String(json.redirect).trim() : "";
+              const loc = (headerLoc || jsonLoc || "").trim();
+              if (loc) {
+                const nextUrl = new URL(loc, url.toString()).toString();
+                try {
+                  const redirected = await doRequest(nextUrl, redirectsLeft - 1);
+                  resolve(redirected);
+                  return;
+                } catch (e) {
+                  reject(e);
+                  return;
+                }
+              }
+            }
+
             resolve({ status, json });
-          } catch {
-            resolve({ status, json: null });
-          }
-        });
-      }
-    );
-    req.on("error", reject);
-    req.write(payload);
-    req.end();
-  });
+          });
+        }
+      );
+      req.on("error", reject);
+      req.write(payload);
+      req.end();
+    });
+  };
+
+  return doRequest(urlString, maxRedirects);
 }
 
 async function isProUser() {
