@@ -25,6 +25,16 @@ async function ensureDir(p: string): Promise<void> {
   await fs.mkdir(p, { recursive: true });
 }
 
+async function getCliInvocation(workspaceRoot: string): Promise<string> {
+  const localCli = path.join(workspaceRoot, "bin", "synapse-unified.js");
+  try {
+    await fs.access(localCli);
+    return `node "${localCli}"`;
+  } catch {
+    return "synapse";
+  }
+}
+
 async function listBackups(): Promise<string[]> {
   try {
     const entries = await fs.readdir(backupRootDir());
@@ -697,8 +707,9 @@ Use meaningful variable names
     const terminal = vscode.window.createTerminal("Synapse Optimizer");
     terminal.show();
     terminal.sendText(`cd "${workspaceRoot}"`);
-    if (choice === "Analyze & Auto-Fix") terminal.sendText("synapse optimize --backup --apply");
-    else terminal.sendText("synapse optimize --backup");
+    const cli = await getCliInvocation(workspaceRoot);
+    if (choice === "Analyze & Auto-Fix") terminal.sendText(`${cli} optimize --backup --apply`);
+    else terminal.sendText(`${cli} optimize --backup`);
   }));
 
   const backupCommand = vscode.commands.registerCommand("synapse.backup", safeCommand("Manage Backups", async () => {
@@ -766,7 +777,8 @@ Use meaningful variable names
     const terminal = vscode.window.createTerminal("Synapse Conflicts");
     terminal.show();
     terminal.sendText(`cd "${workspaceRoot}"`);
-    terminal.sendText("synapse optimize --backup");
+    const cli = await getCliInvocation(workspaceRoot);
+    terminal.sendText(`${cli} optimize --backup`);
   }));
 
   const wsConnectCommand = vscode.commands.registerCommand("synapse.ws.connect", safeCommand("WS Connect", async () => {

@@ -23,6 +23,16 @@ async function getWorkspaceRoot(): Promise<string | null> {
   return root || null;
 }
 
+async function getCliInvocation(workspaceRoot: string): Promise<string> {
+  const localCli = path.join(workspaceRoot, "bin", "synapse-unified.js");
+  try {
+    await fs.access(localCli);
+    return `node "${localCli}"`;
+  } catch {
+    return "synapse";
+  }
+}
+
 async function loadRuleFiles(workspaceRoot: string): Promise<Array<{ filePath: string; content: string }>> {
   const rulesDir = path.join(workspaceRoot, ".synapse", "rules");
   const entries = await fs.readdir(rulesDir).catch(() => []);
@@ -113,7 +123,8 @@ export class SynergyViewProvider implements vscode.WebviewViewProvider {
         const terminal = vscode.window.createTerminal("Synapse Optimizer");
         terminal.show();
         terminal.sendText(`cd "${workspaceRoot}"`);
-        terminal.sendText("synapse optimize --backup");
+        const cli = await getCliInvocation(workspaceRoot);
+        terminal.sendText(`${cli} optimize --backup`);
         return;
       }
 
@@ -121,7 +132,8 @@ export class SynergyViewProvider implements vscode.WebviewViewProvider {
         const terminal = vscode.window.createTerminal("Synapse Optimizer");
         terminal.show();
         terminal.sendText(`cd "${workspaceRoot}"`);
-        terminal.sendText("synapse optimize --backup --apply");
+        const cli = await getCliInvocation(workspaceRoot);
+        terminal.sendText(`${cli} optimize --backup --apply`);
         return;
       }
 
