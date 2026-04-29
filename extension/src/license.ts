@@ -34,73 +34,48 @@ export class LicenseManager {
     return base.replace(/\/+$/, "");
   }
 
-  private async postJson(urlString: string, payload: unknown): Promise<{ status: number; json: any }> {
-    const body = JSON.stringify(payload ?? {});
-    const maxRedirects = 5;
+  private postJson(urlString: string, payload: unknown): Promise<{ status: number; json: any }> {
+    return new Promise((resolve, reject) => {
+      const url = new URL(urlString);
+      const lib = url.protocol === "http:" ? http : https;
+      const body = JSON.stringify(payload ?? {});
 
-    const doRequest = (u: string, redirectsLeft: number): Promise<{ status: number; json: any }> => {
-      return new Promise((resolve, reject) => {
-        const url = new URL(u);
-        const lib = url.protocol === "http:" ? http : https;
-
-        const req = lib.request(
-          {
-            protocol: url.protocol,
-            hostname: url.hostname,
-            port: url.port,
-            path: url.pathname + url.search,
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "Content-Length": Buffer.byteLength(body),
-              Accept: "application/json",
-            },
+      const req = lib.request(
+        {
+          protocol: url.protocol,
+          hostname: url.hostname,
+          port: url.port,
+          path: url.pathname + url.search,
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Content-Length": Buffer.byteLength(body),
+            Accept: "application/json",
           },
-          (res) => {
-            let data = "";
-            res.on("data", (chunk) => {
-              data += chunk.toString();
-            });
-            res.on("end", async () => {
-              const status = res.statusCode || 0;
-              let json: any = null;
-              if (data) {
-                try {
-                  json = JSON.parse(data);
-                } catch {
-                  json = null;
-                }
+        },
+        (res) => {
+          let data = "";
+          res.on("data", (chunk) => {
+            data += chunk.toString();
+          });
+          res.on("end", () => {
+            let json: any = null;
+            if (data) {
+              try {
+                json = JSON.parse(data);
+              } catch {
+                json = null;
               }
+            }
+            resolve({ status: res.statusCode || 0, json });
+          });
+        }
+      );
 
-              if ([301, 302, 303, 307, 308].includes(status) && redirectsLeft > 0) {
-                const headerLoc = typeof res.headers?.location === "string" ? res.headers.location : "";
-                const jsonLoc = typeof json?.redirect === "string" ? String(json.redirect).trim() : "";
-                const loc = (headerLoc || jsonLoc || "").trim();
-                if (loc) {
-                  const nextUrl = new URL(loc, url.toString()).toString();
-                  try {
-                    const redirected = await doRequest(nextUrl, redirectsLeft - 1);
-                    resolve(redirected);
-                    return;
-                  } catch (e) {
-                    reject(e);
-                    return;
-                  }
-                }
-              }
-
-              resolve({ status, json });
-            });
-          }
-        );
-
-        req.on("error", reject);
-        req.write(body);
-        req.end();
-      });
-    };
-
-    return await doRequest(urlString, maxRedirects);
+      req.on("error", reject);
+      req.write(body);
+      req.end();
+    });
   }
 
   private async validateWithServer(key: string): Promise<{ valid: boolean; reason?: string }> {
