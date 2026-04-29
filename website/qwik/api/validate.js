@@ -39,7 +39,7 @@ function extractKey(req) {
 }
 
 function parseKey(licenseKey) {
-  const match = typeof licenseKey === "string" ? licenseKey.match(/^synapse_([a-z0-9]+)_([a-f0-9]{16})$/i) : null;
+  const match = typeof licenseKey === "string" ? licenseKey.match(/^synapse_([a-z0-9]+)_([a-f0-9]{16})$/) : null;
   if (!match) return { valid: false, reason: "Invalid format" };
   const [, timestampBase36, signatureHex] = match;
   const tsSeconds = parseInt(timestampBase36, 36);
@@ -49,7 +49,7 @@ function parseKey(licenseKey) {
     const issuedAtMs = tsSeconds * 1000;
     if (Date.now() - issuedAtMs > maxAgeMs) return { valid: false, reason: "License expired" };
   }
-  return { valid: true, timestampBase36: String(timestampBase36).toLowerCase(), signatureHex: String(signatureHex).toLowerCase() };
+  return { valid: true, timestampBase36, signatureHex };
 }
 
 function hmacSignature(timestampBase36, secret) {
@@ -173,16 +173,14 @@ async function validateLicense(req, res) {
   }
 
   const parsed = parseKey(licenseKey);
-  const isLegacyKey = /^synapse_pro_[a-z0-9_-]+$/i.test(licenseKey);
-  if (!parsed.valid && !isLegacyKey) {
+  if (!parsed.valid) {
     return res.status(200).json({ valid: false, reason: parsed.reason });
   }
-  if (parsed.valid) {
-    const expected = hmacSignature(parsed.timestampBase36, LICENSE_SECRET).toLowerCase();
-    const ok = safeEqualHex16(expected, parsed.signatureHex);
-    if (!ok) {
-      return res.status(200).json({ valid: false, reason: "Invalid signature" });
-    }
+
+  const expected = hmacSignature(parsed.timestampBase36, LICENSE_SECRET);
+  const ok = safeEqualHex16(expected, parsed.signatureHex);
+  if (!ok) {
+    return res.status(200).json({ valid: false, reason: "Invalid signature" });
   }
 
   const db = await fetchLicenseFromDb(licenseKey);
@@ -195,8 +193,7 @@ async function validateLicense(req, res) {
     return res.status(200).json({ valid: false, reason: "License not found" });
   }
 
-  const allowedStatuses = isLegacyKey ? ["active", "legacy"] : ["active"];
-  if (!allowedStatuses.includes(record.status)) {
+  if (record.status !== "active") {
     return res.status(200).json({ valid: false, reason: `License is ${record.status}` });
   }
 
