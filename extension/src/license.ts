@@ -31,7 +31,10 @@ export class LicenseManager {
   private getApiBaseUrl(): string {
     const configured = vscode.workspace.getConfiguration("synapse").get<string>("licenseApiUrl");
     const base = typeof configured === "string" && configured.trim() ? configured.trim() : DEFAULT_API_BASE_URL;
-    return base.replace(/\/+$/, "");
+    const normalized = base.replace(/\/+$/, "");
+    if (normalized === "https://labs-synapse.com") return "https://www.labs-synapse.com";
+    if (normalized === "http://labs-synapse.com") return "http://www.labs-synapse.com";
+    return normalized;
   }
 
   private async postJson(urlString: string, payload: unknown): Promise<{ status: number; json: any }> {

@@ -8,7 +8,10 @@ const { DEFAULT_API_BASE_URL, PRO_PRICE_LABEL, PRO_TERMS_LABEL, getProCheckoutUr
 function getApiBaseUrl() {
   const env = process.env.SYNAPSE_LICENSE_API_URL;
   const base = typeof env === "string" && env.trim() ? env.trim() : DEFAULT_API_BASE_URL;
-  return base.replace(/\/+$/, "");
+  const normalized = base.replace(/\/+$/, "");
+  if (normalized === "https://labs-synapse.com") return "https://www.labs-synapse.com";
+  if (normalized === "http://labs-synapse.com") return "http://www.labs-synapse.com";
+  return normalized;
 }
 
 function getLicenseKeyPath() {
