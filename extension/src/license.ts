@@ -75,7 +75,8 @@ export class LicenseManager {
               if ([301, 302, 303, 307, 308].includes(status) && redirectsLeft > 0) {
                 const headerLoc = typeof res.headers?.location === "string" ? res.headers.location : "";
                 const jsonLoc = typeof json?.redirect === "string" ? String(json.redirect).trim() : "";
-                const loc = (headerLoc || jsonLoc || "").trim();
+                const rawLoc = (headerLoc || jsonLoc || "").trim();
+                const loc = rawLoc.replace(/^`+/, "").replace(/`+$/, "").trim();
                 if (loc) {
                   const nextUrl = new URL(loc, url.toString()).toString();
                   try {
