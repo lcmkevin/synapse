@@ -24,18 +24,16 @@
 
     <section class="section" style="padding-top:140px">
       <h2 class="section-title">Simple, Transparent Pricing</h2>
-      <p class="section-subtitle">One-time payment for Pro. No recurring fees. Enterprise later.</p>
+      <p class="section-subtitle">Free forever. Pro for $9 one-time (no recurring fees). Enterprise later.</p>
       <div class="pricing-grid">
         <div class="pricing-card">
           <h3>Free</h3>
           <div class="price">$0 <span>forever</span></div>
           <ul class="pricing-features">
-            <li>✅ 5 IDE adapters (Cursor, Trae, Windsurf, Cline, Zed)</li>
-            <li>✅ Rule compilation &amp; sync</li>
-            <li>✅ Token analysis + cost dashboard</li>
-            <li>✅ Manual adapter downloads</li>
-            <li>❌ No adapter versions/rollback</li>
-            <li>❌ No auto-updates</li>
+            <li>✅ Real-Time Token Visualizer: See exactly how many tokens your rules are burning via Webview.</li>
+            <li>✅ Lightning-Fast Regex Engine: Uses V8's native single-pass scan for zero lag.</li>
+            <li>✅ Basic Defluffer: Automatically strips 40+ common filler phrases and trims whitespace.</li>
+            <li>✅ Code Protector: Isolates your code blocks during compression so they don't break.</li>
           </ul>
           <a class="btn btn-outline" href="./downloads/adapters/">Download adapters</a>
         </div>
@@ -45,12 +43,12 @@
           <div class="price">$9 <span>one-time</span></div>
           <div class="price-caption">One-time payment • No recurring fees</div>
           <ul class="pricing-features">
-            <li>✅ Everything in Free</li>
-            <li>✅ One-click adapter updates</li>
-            <li>✅ Background updates during sync</li>
-            <li>✅ Adapter versions + rollback</li>
-            <li>✅ Priority new IDE support</li>
-            <li>✅ Unlimited IDE targets</li>
+            <li>✅ All Free Features Included</li>
+            <li>✅ Anthropic Claude Tokenizer: Get precise calculations for Sonnet models, not just OpenAI.</li>
+            <li>✅ Supabase Cloud Sync: Get dynamic, live-updated dictionaries pushed directly to your local IDE.</li>
+            <li>✅ Advanced Logic Symbolization: Shrink heavy logic into high-density tokens like [IF file==JS].</li>
+            <li>✅ VS Code Edge AI Fallback: If standard rules fail to shrink, we utilize local vscode.lm for lossless semantic pruning—100% free with 0 API cost.</li>
+            <li>✅ Token Budget Guardrail: Stops you from sending huge prompts by warning you if rules exceed your custom token threshold.</li>
           </ul>
           <button class="btn btn-primary" id="proCheckoutBtn">Checkout → Get Pro key</button>
         </div>
@@ -77,6 +75,15 @@
               <tr><th>Feature</th><th>Free</th><th>Pro</th><th>Enterprise</th></tr>
             </thead>
             <tbody>
+              <tr><td>Real-Time Token Visualizer</td><td class="check">✅</td><td class="check">✅</td><td class="check">✅</td></tr>
+              <tr><td>Lightning-Fast Regex Engine</td><td class="check">✅</td><td class="check">✅</td><td class="check">✅</td></tr>
+              <tr><td>Basic Defluffer</td><td class="check">✅</td><td class="check">✅</td><td class="check">✅</td></tr>
+              <tr><td>Code Protector</td><td class="check">✅</td><td class="check">✅</td><td class="check">✅</td></tr>
+              <tr><td>Anthropic Claude Tokenizer</td><td class="cross">❌</td><td class="check">✅</td><td class="check">✅</td></tr>
+              <tr><td>Supabase Cloud Sync</td><td class="cross">❌</td><td class="check">✅</td><td class="check">✅</td></tr>
+              <tr><td>Advanced Logic Symbolization</td><td class="cross">❌</td><td class="check">✅</td><td class="check">✅</td></tr>
+              <tr><td>VS Code Edge AI Fallback</td><td class="cross">❌</td><td class="check">✅</td><td class="check">✅</td></tr>
+              <tr><td>Token Budget Guardrail</td><td class="cross">❌</td><td class="check">✅</td><td class="check">✅</td></tr>
               <tr><td>Rule sync across IDEs</td><td class="check">✅</td><td class="check">✅</td><td class="check">✅</td></tr>
               <tr><td>Token analysis + cost dashboard</td><td class="check">✅</td><td class="check">✅</td><td class="check">✅</td></tr>
               <tr><td>Local optimization (analyze)</td><td class="check">✅</td><td class="check">✅</td><td class="check">✅</td></tr>
@@ -91,6 +98,32 @@
               <tr><td>Audit logs</td><td class="cross">❌</td><td class="cross">❌</td><td class="check">✅</td></tr>
             </tbody>
           </table>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" style="padding-top:0">
+      <h2 class="section-title">Token FAQ</h2>
+      <p class="section-subtitle">Tokens are how AI models measure input and output size. Less tokens usually means lower cost and faster responses.</p>
+      <div class="pricing-grid" style="grid-template-columns: 1fr; max-width: 920px; margin: 2rem auto 0;">
+        <div class="pricing-card" style="transform:none; text-align:left">
+          <h3>What is a token?</h3>
+          <p style="color: var(--muted); margin-top: 0.5rem;">
+            A token is a small chunk of text (often ~4 characters of English on average). Models bill and enforce limits using tokens, not characters.
+          </p>
+          <h3 style="margin-top: 1.25rem;">How does it affect spending?</h3>
+          <p style="color: var(--muted); margin-top: 0.5rem;">
+            Most hosted AI tools charge per token (input + output). If your rules are verbose, every chat includes extra tokens, increasing cost over time.
+          </p>
+          <h3 style="margin-top: 1.25rem;">How Synapse helps</h3>
+          <ul class="pricing-features" style="margin-top: 0.75rem;">
+            <li>Shows token counts in real-time so you can see what’s expensive.</li>
+            <li>Compresses rules safely (including code-block protection) to remove fluff.</li>
+            <li>Pro can fallback to local VS Code models for semantic pruning with 0 API token cost.</li>
+          </ul>
+          <p style="color: var(--muted); margin-top: 0.75rem;">
+            Want to see typical token pricing across popular models? <a href="https://zed.dev/docs/ai/models" target="_blank" rel="noreferrer">View a model pricing reference</a>.
+          </p>
         </div>
       </div>
     </section>
