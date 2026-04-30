@@ -9,7 +9,7 @@ function loadProModule(): any | null {
 }
 
 function printManualInstructions(ideId: string): void {
-  let base = "https://labs-synapse.com";
+  let base = "https://www.labs-synapse.com";
   try {
     const mod = require("../license-check.js") as any;
     if (mod && typeof mod.getApiBaseUrl === "function") base = String(mod.getApiBaseUrl());

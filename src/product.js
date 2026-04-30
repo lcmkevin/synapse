@@ -1,4 +1,4 @@
-const DEFAULT_API_BASE_URL = "https://labs-synapse.com";
+const DEFAULT_API_BASE_URL = "https://www.labs-synapse.com";
 
 const PRO_PRICE_LABEL = typeof process.env.SYNAPSE_PRO_PRICE_LABEL === "string" && process.env.SYNAPSE_PRO_PRICE_LABEL.trim()
   ? process.env.SYNAPSE_PRO_PRICE_LABEL.trim()

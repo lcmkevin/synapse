@@ -12,7 +12,7 @@ export type CurrentLicense = {
 
 function getApiBaseUrl(): string {
   const env = process.env.SYNAPSE_LICENSE_API_URL;
-  const base = typeof env === "string" && env.trim() ? env.trim() : "https://labs-synapse.com";
+  const base = typeof env === "string" && env.trim() ? env.trim() : "https://www.labs-synapse.com";
   return base.replace(/\/+$/, "");
 }
 

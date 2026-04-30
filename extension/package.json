@@ -255,7 +255,7 @@
         },
         "synapse.licenseApiUrl": {
           "type": "string",
-          "default": "https://labs-synapse.com",
+          "default": "https://www.labs-synapse.com",
           "description": "Base URL for license validation API (expects /api/validate)."
         },
         "synapse.proPriceLabel": {

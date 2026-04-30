@@ -1,6 +1,6 @@
 import * as vscode from "vscode";
 
-export const DEFAULT_API_BASE_URL = "https://labs-synapse.com";
+export const DEFAULT_API_BASE_URL = "https://www.labs-synapse.com";
 
 export function getProPriceLabel(): string {
   const fromSettings = vscode.workspace.getConfiguration("synapse").get<string>("proPriceLabel");
