@@ -55,5 +55,5 @@ jobs:
       - run: npx @vscode/vsce@2.26.0 publish -p "${VSCODE_MARKETPLACE_TOKEN}"
         if: env.VSCODE_MARKETPLACE_TOKEN != ''
         working-directory: ./extension
-      - run: echo "Skipping VS Code Marketplace publish: VSCODE_MARKETPLACE_TOKEN not set."
+      - run: 'echo "Skipping VS Code Marketplace publish: VSCODE_MARKETPLACE_TOKEN not set."'
         if: env.VSCODE_MARKETPLACE_TOKEN == ''
