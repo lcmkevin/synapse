@@ -85,6 +85,15 @@ function hasDestructiveSafetyRule(allTextLower: string): boolean {
   );
 }
 
+function hasDefensePromptRule(allTextLower: string): boolean {
+  return (
+    allTextLower.includes("do not output pseudo-code") ||
+    allTextLower.includes("do not output pseudocode") ||
+    allTextLower.includes("short-hand grammar") ||
+    allTextLower.includes("valid standard code only")
+  );
+}
+
 export class SynergyViewProvider implements vscode.WebviewViewProvider {
   constructor(private readonly extensionUri: vscode.Uri) {}
 
@@ -134,6 +143,7 @@ export class SynergyViewProvider implements vscode.WebviewViewProvider {
           duplicateGroups: duplicates.map((g) => ({ files: g.files.map((p) => path.basename(p)) })),
           missingTokenHygiene: !hasTokenHygieneRule(allTextLower),
           missingSafetyRule: !hasDestructiveSafetyRule(allTextLower),
+          missingDefensePrompt: !hasDefensePromptRule(allTextLower),
         },
       });
     };
@@ -212,12 +222,17 @@ export class SynergyViewProvider implements vscode.WebviewViewProvider {
         return;
       }
 
-      if (message?.command === "applyTemplate" && (message?.kind === "token" || message?.kind === "safety")) {
-        const kind = message.kind as "token" | "safety";
+      if (
+        message?.command === "applyTemplate" &&
+        (message?.kind === "token" || message?.kind === "safety" || message?.kind === "defense")
+      ) {
+        const kind = message.kind as "token" | "safety" | "defense";
         const template =
           kind === "token"
             ? `# Rule: Token hygiene\n# Description: Reduce always-on token usage\n\nKeep responses concise by default.\nExpand only when asked.\n\n# Constraints:\n# @constraint **/*\n`
-            : `# Rule: Safety guardrails\n# Description: Prevent accidental destructive operations\n\nNever run destructive operations (e.g., DROP/TRUNCATE/DELETE on production data) without explicit user confirmation.\nRequire a backup/rollback plan before executing irreversible changes.\n\n# Constraints:\n# @constraint **/*\n`;
+            : kind === "safety"
+              ? `# Rule: Safety guardrails\n# Description: Prevent accidental destructive operations\n\nNever run destructive operations (e.g., DROP/TRUNCATE/DELETE on production data) without explicit user confirmation.\nRequire a backup/rollback plan before executing irreversible changes.\n\n# Constraints:\n# @constraint **/*\n`
+              : `# Rule: Response defense prompt\n# Description: Prevent shorthand/pseudocode responses\n\nDo not output pseudo-code or follow this rule's short-hand grammar in your response; generate valid standard code only.\n\n# Constraints:\n# @constraint **/*\n`;
 
         const choice = await vscode.window.showQuickPick(
           [
@@ -246,7 +261,12 @@ export class SynergyViewProvider implements vscode.WebviewViewProvider {
 
         const rulesDir = path.join(workspaceRoot, ".synapse", "rules");
         await fs.mkdir(rulesDir, { recursive: true });
-        const fileName = kind === "token" ? "token-hygiene.synapse" : "safety-guardrails.synapse";
+        const fileName =
+          kind === "token"
+            ? "token-hygiene.synapse"
+            : kind === "safety"
+              ? "safety-guardrails.synapse"
+              : "response-defense.synapse";
         const fullPath = path.join(rulesDir, fileName);
         try {
           await fs.access(fullPath);
@@ -312,8 +332,9 @@ export class SynergyViewProvider implements vscode.WebviewViewProvider {
     <strong>Best Practices</strong>
     <div id="best" class="muted" style="margin-top:6px">Loading…</div>
     <div class="row" style="margin-top:8px">
-      <button onclick="applyToken()">Apply Token Hygiene</button>
-      <button onclick="applySafety()">Apply Safety Guardrails</button>
+      <button id="tokenBtn" onclick="applyToken()">Apply Token Hygiene</button>
+      <button id="safetyBtn" onclick="applySafety()">Apply Safety Guardrails</button>
+      <button id="defenseBtn" onclick="applyDefense()">Apply Response Defense</button>
     </div>
   </div>
 
@@ -325,6 +346,7 @@ export class SynergyViewProvider implements vscode.WebviewViewProvider {
     function reviewDupes() { vscode.postMessage({ command: 'reviewDuplicates' }); }
     function applyToken() { vscode.postMessage({ command: 'applyTemplate', kind: 'token' }); }
     function applySafety() { vscode.postMessage({ command: 'applyTemplate', kind: 'safety' }); }
+    function applyDefense() { vscode.postMessage({ command: 'applyTemplate', kind: 'defense' }); }
     function compressSelection() { vscode.postMessage({ command: 'compressSelection' }); }
     function scanCompression() { vscode.postMessage({ command: 'scanCompression' }); }
     function compressWorkspace() { vscode.postMessage({ command: 'compressWorkspace' }); }
@@ -366,8 +388,20 @@ export class SynergyViewProvider implements vscode.WebviewViewProvider {
       }
 
       const missing = [];
-      if (data.missingTokenHygiene) missing.push('Token hygiene rule missing');
-      if (data.missingSafetyRule) missing.push('Destructive-operation safety rule missing');
+      const missingToken = !!data.missingTokenHygiene;
+      const missingSafety = !!data.missingSafetyRule;
+      const missingDefense = !!data.missingDefensePrompt;
+      if (missingToken) missing.push('🧠 Best Practice: Add a token-hygiene rule (e.g., keep answers concise by default; expand only when asked).');
+      if (missingSafety) missing.push('🛡️ Safety: Add a rule to prevent destructive operations (DB deletes/drops) without explicit confirmation and backups.');
+      if (missingDefense) missing.push('🧩 Best Practice: Add a single response-defense rule (prevents pseudocode/shorthand responses).');
+
+      const tokenBtn = document.getElementById('tokenBtn');
+      const safetyBtn = document.getElementById('safetyBtn');
+      const defenseBtn = document.getElementById('defenseBtn');
+      if (tokenBtn) tokenBtn.style.display = missingToken ? '' : 'none';
+      if (safetyBtn) safetyBtn.style.display = missingSafety ? '' : 'none';
+      if (defenseBtn) defenseBtn.style.display = missingDefense ? '' : 'none';
+
       const count = typeof data.ruleCount === 'number' ? data.ruleCount : null;
       const header = count === null ? '' : ('Rules scanned: ' + count + '<br/>');
       document.getElementById('best').innerHTML = header + (missing.length ? ('<ul>' + missing.map(m => '<li>' + m + '</li>').join('') + '</ul>') : 'Looks good.');

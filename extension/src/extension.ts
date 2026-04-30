@@ -865,12 +865,6 @@ Use meaningful variable names
     "Run Conflict Detection",
     "synapse.detect"
   );
-  const tokenAnalysisProvider = new PlaceholderViewProvider(
-    "Token Analysis",
-    "Analyze token usage across your Synapse rules and show the biggest rules.",
-    "Analyze Tokens",
-    "synapse.analyzeTokens"
-  );
   const actionsProvider = new ActionsViewProvider(context.extensionUri);
   const synergyProvider = new SynergyViewProvider(context.extensionUri);
   const dashboardProvider = new CostDashboardProvider(context);
@@ -1167,8 +1161,7 @@ Use meaningful variable names
     vscode.window.registerWebviewViewProvider("synapseActionsView", actionsProvider),
     vscode.window.registerWebviewViewProvider("synapseCostDashboard", dashboardProvider),
     vscode.window.registerWebviewViewProvider("synapseSynergyView", synergyProvider),
-    vscode.window.registerWebviewViewProvider("synapseConflictDetectionView", conflictsProvider),
-    vscode.window.registerWebviewViewProvider("synapseTokenAnalysisView", tokenAnalysisProvider)
+    vscode.window.registerWebviewViewProvider("synapseConflictDetectionView", conflictsProvider)
   );
 
   return { isProUser };
