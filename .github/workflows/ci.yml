@@ -31,7 +31,7 @@ jobs:
   publish:
     needs: build
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && secrets.VSCODE_MARKETPLACE_TOKEN != ''
     steps:
       - uses: actions/checkout@v4
       - name: Init pro submodule (optional)
