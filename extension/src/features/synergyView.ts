@@ -33,17 +33,27 @@ async function getCliInvocation(workspaceRoot: string): Promise<string> {
   }
 }
 
-async function loadRuleFiles(workspaceRoot: string): Promise<Array<{ filePath: string; content: string }>> {
-  const rulesDir = path.join(workspaceRoot, ".synapse", "rules");
-  const entries = await fs.readdir(rulesDir).catch(() => []);
-  const files = entries.filter((f) => f.toLowerCase().endsWith(".synapse"));
+async function loadRuleFilesFromDir(dirPath: string): Promise<Array<{ filePath: string; content: string }>> {
+  const entries = await fs.readdir(dirPath).catch(() => []);
   const out: Array<{ filePath: string; content: string }> = [];
-  for (const f of files) {
-    const filePath = path.join(rulesDir, f);
+  for (const f of entries) {
+    const filePath = path.join(dirPath, f);
+    const lc = f.toLowerCase();
+    const looksLikeRule =
+      lc.endsWith(".synapse") || lc.endsWith(".md") || lc.endsWith(".mdc") || lc.endsWith(".rules") || lc.endsWith(".xml") || lc.endsWith(".txt");
+    if (!looksLikeRule) continue;
     const content = await fs.readFile(filePath, "utf8").catch(() => "");
     out.push({ filePath, content });
   }
   return out;
+}
+
+async function loadRuleFiles(workspaceRoot: string): Promise<Array<{ filePath: string; content: string }>> {
+  const synapseRulesDir = path.join(workspaceRoot, ".synapse", "rules");
+  const traeRulesDir = path.join(workspaceRoot, ".trae", "rules");
+  const synapse = await loadRuleFilesFromDir(synapseRulesDir);
+  const trae = await loadRuleFilesFromDir(traeRulesDir);
+  return [...synapse, ...trae];
 }
 
 async function findDuplicateRules(workspaceRoot: string): Promise<DuplicateGroup[]> {
@@ -79,8 +89,10 @@ export class SynergyViewProvider implements vscode.WebviewViewProvider {
   constructor(private readonly extensionUri: vscode.Uri) {}
 
   private view?: vscode.WebviewView;
+  private lastTelemetry?: { savingsPercent: number; beforeTokens: number; afterTokens: number };
 
   postCompressionTelemetry(payload: { savingsPercent: number; beforeTokens: number; afterTokens: number }) {
+    this.lastTelemetry = payload;
     try {
       void this.view?.webview.postMessage({ command: "compressionTelemetry", data: payload });
     } catch {
@@ -96,6 +108,13 @@ export class SynergyViewProvider implements vscode.WebviewViewProvider {
     };
 
     webviewView.webview.html = this.getHtml();
+    if (this.lastTelemetry) {
+      try {
+        void webviewView.webview.postMessage({ command: "compressionTelemetry", data: this.lastTelemetry });
+      } catch {
+        void 0;
+      }
+    }
 
     const refresh = async () => {
       const workspaceRoot = await getWorkspaceRoot();
@@ -111,6 +130,7 @@ export class SynergyViewProvider implements vscode.WebviewViewProvider {
         command: "update",
         data: {
           hasWorkspace: true,
+          ruleCount: rules.length,
           duplicateGroups: duplicates.map((g) => ({ files: g.files.map((p) => path.basename(p)) })),
           missingTokenHygiene: !hasTokenHygieneRule(allTextLower),
           missingSafetyRule: !hasDestructiveSafetyRule(allTextLower),
@@ -153,6 +173,18 @@ export class SynergyViewProvider implements vscode.WebviewViewProvider {
         return;
       }
 
+      if (message?.command === "scanCompression") {
+        const result: any = await vscode.commands.executeCommand("synapse.ruleCompressor.scanWorkspace");
+        await webviewView.webview.postMessage({ command: "compressionScan", data: result || null });
+        return;
+      }
+
+      if (message?.command === "compressWorkspace") {
+        await vscode.commands.executeCommand("synapse.ruleCompressor.compressWorkspace");
+        await refresh();
+        return;
+      }
+
       if (message?.command === "syncDictionary") {
         await vscode.commands.executeCommand("synapse.ruleCompressor.syncDictionary");
         return;
@@ -180,13 +212,48 @@ export class SynergyViewProvider implements vscode.WebviewViewProvider {
         return;
       }
 
-      if (message?.command === "openTemplate" && (message?.kind === "token" || message?.kind === "safety")) {
+      if (message?.command === "applyTemplate" && (message?.kind === "token" || message?.kind === "safety")) {
         const kind = message.kind as "token" | "safety";
         const template =
           kind === "token"
             ? `# Rule: Token hygiene\n# Description: Reduce always-on token usage\n\nKeep responses concise by default.\nExpand only when asked.\n\n# Constraints:\n# @constraint **/*\n`
             : `# Rule: Safety guardrails\n# Description: Prevent accidental destructive operations\n\nNever run destructive operations (e.g., DROP/TRUNCATE/DELETE on production data) without explicit user confirmation.\nRequire a backup/rollback plan before executing irreversible changes.\n\n# Constraints:\n# @constraint **/*\n`;
-        const doc = await vscode.workspace.openTextDocument({ language: "markdown", content: template });
+
+        const choice = await vscode.window.showQuickPick(
+          [
+            { label: "Create a new Synapse rule file", value: "create" as const },
+            { label: "Insert into current editor", value: "insert" as const },
+          ],
+          { placeHolder: "Apply template" }
+        );
+        if (!choice) return;
+
+        const workspaceRoot = await getWorkspaceRoot();
+        if (!workspaceRoot) {
+          vscode.window.showErrorMessage("Open a workspace first");
+          return;
+        }
+
+        if (choice.value === "insert") {
+          const editor = vscode.window.activeTextEditor;
+          if (!editor) {
+            vscode.window.showErrorMessage("Open a file first");
+            return;
+          }
+          await editor.edit((b) => b.insert(editor.selection.active, (editor.selection.isEmpty ? "\n\n" : "") + template));
+          return;
+        }
+
+        const rulesDir = path.join(workspaceRoot, ".synapse", "rules");
+        await fs.mkdir(rulesDir, { recursive: true });
+        const fileName = kind === "token" ? "token-hygiene.synapse" : "safety-guardrails.synapse";
+        const fullPath = path.join(rulesDir, fileName);
+        try {
+          await fs.access(fullPath);
+        } catch {
+          await fs.writeFile(fullPath, template, "utf8");
+        }
+        const doc = await vscode.workspace.openTextDocument(vscode.Uri.file(fullPath));
         await vscode.window.showTextDocument(doc, { preview: false });
         return;
       }
@@ -216,9 +283,12 @@ export class SynergyViewProvider implements vscode.WebviewViewProvider {
   <div class="card">
     <div class="row">
       <button onclick="compressSelection()">Compress Selection</button>
+      <button onclick="scanCompression()">Scan Workspace</button>
+      <button onclick="compressWorkspace()">Compress Workspace</button>
       <button onclick="syncDictionary()">Sync Pro Dictionary</button>
     </div>
     <div id="compression" class="muted" style="margin-top:8px">Tokens Saved: —</div>
+    <div id="compressionScan" class="muted" style="margin-top:6px"></div>
   </div>
 
   <div class="card">
@@ -242,8 +312,8 @@ export class SynergyViewProvider implements vscode.WebviewViewProvider {
     <strong>Best Practices</strong>
     <div id="best" class="muted" style="margin-top:6px">Loading…</div>
     <div class="row" style="margin-top:8px">
-      <button onclick="openToken()">Open Token Hygiene Template</button>
-      <button onclick="openSafety()">Open Safety Template</button>
+      <button onclick="applyToken()">Apply Token Hygiene</button>
+      <button onclick="applySafety()">Apply Safety Guardrails</button>
     </div>
   </div>
 
@@ -253,9 +323,11 @@ export class SynergyViewProvider implements vscode.WebviewViewProvider {
     function optApply() { vscode.postMessage({ command: 'optimizeApply' }); }
     function refresh() { vscode.postMessage({ command: 'refresh' }); }
     function reviewDupes() { vscode.postMessage({ command: 'reviewDuplicates' }); }
-    function openToken() { vscode.postMessage({ command: 'openTemplate', kind: 'token' }); }
-    function openSafety() { vscode.postMessage({ command: 'openTemplate', kind: 'safety' }); }
+    function applyToken() { vscode.postMessage({ command: 'applyTemplate', kind: 'token' }); }
+    function applySafety() { vscode.postMessage({ command: 'applyTemplate', kind: 'safety' }); }
     function compressSelection() { vscode.postMessage({ command: 'compressSelection' }); }
+    function scanCompression() { vscode.postMessage({ command: 'scanCompression' }); }
+    function compressWorkspace() { vscode.postMessage({ command: 'compressWorkspace' }); }
     function syncDictionary() { vscode.postMessage({ command: 'syncDictionary' }); }
 
     window.addEventListener('message', event => {
@@ -267,6 +339,17 @@ export class SynergyViewProvider implements vscode.WebviewViewProvider {
         const after = typeof data.afterTokens === 'number' ? data.afterTokens : null;
         const text = saved === null ? 'Tokens Saved: —' : ('Tokens Saved: ' + saved.toFixed(1) + '% (' + before + ' → ' + after + ')');
         document.getElementById('compression').textContent = text;
+        return;
+      }
+      if (msg.command === 'compressionScan') {
+        const data = msg.data || {};
+        const total = typeof data.totalFiles === 'number' ? data.totalFiles : null;
+        const can = typeof data.compressibleFiles === 'number' ? data.compressibleFiles : null;
+        const saved = typeof data.savingsPercent === 'number' ? data.savingsPercent : null;
+        const before = typeof data.beforeTokens === 'number' ? data.beforeTokens : null;
+        const after = typeof data.afterTokens === 'number' ? data.afterTokens : null;
+        const t = total === null ? '' : ('Scan: ' + can + '/' + total + ' compressible · ' + (saved === null ? '—' : saved.toFixed(1) + '%') + ' (' + before + ' → ' + after + ')');
+        document.getElementById('compressionScan').textContent = t;
         return;
       }
       if (msg.command !== 'update') return;
@@ -285,8 +368,12 @@ export class SynergyViewProvider implements vscode.WebviewViewProvider {
       const missing = [];
       if (data.missingTokenHygiene) missing.push('Token hygiene rule missing');
       if (data.missingSafetyRule) missing.push('Destructive-operation safety rule missing');
-      document.getElementById('best').innerHTML = missing.length ? ('<ul>' + missing.map(m => '<li>' + m + '</li>').join('') + '</ul>') : 'Looks good.';
+      const count = typeof data.ruleCount === 'number' ? data.ruleCount : null;
+      const header = count === null ? '' : ('Rules scanned: ' + count + '<br/>');
+      document.getElementById('best').innerHTML = header + (missing.length ? ('<ul>' + missing.map(m => '<li>' + m + '</li>').join('') + '</ul>') : 'Looks good.');
     });
+
+    refresh();
   </script>
 </body>
 </html>`;

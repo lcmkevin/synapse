@@ -159,8 +159,19 @@ async function promptForCleanup(context: vscode.ExtensionContext): Promise<void>
 }
 
 class PlaceholderViewProvider implements vscode.WebviewViewProvider {
+  constructor(
+    private readonly title: string,
+    private readonly description: string,
+    private readonly buttonLabel: string,
+    private readonly commandId: string
+  ) {}
+
   resolveWebviewView(webviewView: vscode.WebviewView) {
-    webviewView.webview.html = `<html><body><h3>Synapse</h3><p>Ready</p></body></html>`;
+    webviewView.webview.options = { enableScripts: true };
+    webviewView.webview.html = `<!doctype html><html><body style="padding:10px;font-family:var(--vscode-font-family)"><h3>${this.title}</h3><p>${this.description}</p><button id="run" style="padding:6px 10px">${this.buttonLabel}</button><script>const vscode=acquireVsCodeApi();document.getElementById('run').onclick=()=>vscode.postMessage({command:'run'});</script></body></html>`;
+    webviewView.webview.onDidReceiveMessage(async (msg) => {
+      if (msg?.command === "run") await vscode.commands.executeCommand(this.commandId);
+    });
   }
 }
 
@@ -219,6 +230,16 @@ export async function activate(context: vscode.ExtensionContext) {
   const compressor = await loadRuleCompressor(context);
   const output = vscode.window.createOutputChannel("Synapse");
   context.subscriptions.push(output);
+
+  const virtualDocs = new Map<string, string>();
+  context.subscriptions.push(
+    vscode.workspace.registerTextDocumentContentProvider("synapse-virtual", {
+      provideTextDocumentContent(uri) {
+        const key = decodeURIComponent(String(uri.path || "").replace(/^\//, ""));
+        return virtualDocs.get(key) || "";
+      },
+    })
+  );
 
   const adapterManager = new AdapterManager(context); // NEW:
   tokenCounter = new TokenCounter();
@@ -838,7 +859,18 @@ Use meaningful variable names
     },
   });
 
-  const placeholderProvider = new PlaceholderViewProvider();
+  const conflictsProvider = new PlaceholderViewProvider(
+    "Conflicts",
+    "Runs conflict detection and optimization analysis (opens a terminal).",
+    "Run Conflict Detection",
+    "synapse.detect"
+  );
+  const tokenAnalysisProvider = new PlaceholderViewProvider(
+    "Token Analysis",
+    "Analyze token usage across your Synapse rules and show the biggest rules.",
+    "Analyze Tokens",
+    "synapse.analyzeTokens"
+  );
   const actionsProvider = new ActionsViewProvider(context.extensionUri);
   const synergyProvider = new SynergyViewProvider(context.extensionUri);
   const dashboardProvider = new CostDashboardProvider(context);
@@ -904,7 +936,193 @@ Use meaningful variable names
         beforeTokens: result.beforeTokens,
         afterTokens: result.afterTokens,
       });
+      actionsProvider.postCompressionTelemetry({
+        savingsPercent: result.savingsPercent,
+        beforeTokens: result.beforeTokens,
+        afterTokens: result.afterTokens,
+      });
       vscode.window.showInformationMessage(`Tokens Saved: ${result.savingsPercent.toFixed(1)}%`);
+    })
+  );
+
+  async function getCompressionSources(workspaceRoot: string): Promise<Array<{ label: string; dir: string }>> {
+    const sources: Array<{ label: string; dir: string }> = [];
+    const synapseDir = path.join(workspaceRoot, ".synapse", "rules");
+    const traeDir = path.join(workspaceRoot, ".trae", "rules");
+    try {
+      await fs.access(synapseDir);
+      sources.push({ label: "Synapse rules (.synapse/rules)", dir: synapseDir });
+    } catch {
+      void 0;
+    }
+    try {
+      await fs.access(traeDir);
+      sources.push({ label: "Trae rules (.trae/rules)", dir: traeDir });
+    } catch {
+      void 0;
+    }
+    if (sources.length === 0) sources.push({ label: "Synapse rules (.synapse/rules)", dir: synapseDir });
+    return sources;
+  }
+
+  async function loadTextFiles(dirPath: string, allowedExts: string[]): Promise<string[]> {
+    const entries = await fs.readdir(dirPath).catch(() => []);
+    const files: string[] = [];
+    for (const f of entries) {
+      const lc = f.toLowerCase();
+      if (!allowedExts.some((e) => lc.endsWith(e))) continue;
+      files.push(path.join(dirPath, f));
+    }
+    files.sort((a, b) => a.localeCompare(b));
+    return files;
+  }
+
+  async function scanCompression(dirPath: string): Promise<{
+    sourceDir: string;
+    totalFiles: number;
+    compressibleFiles: number;
+    beforeTokens: number;
+    afterTokens: number;
+    savingsPercent: number;
+    top: Array<{ file: string; savingsPercent: number; beforeTokens: number; afterTokens: number }>;
+  }> {
+    const files = await loadTextFiles(dirPath, [".synapse", ".md", ".mdc", ".txt", ".xml", ".rules"]);
+    const isPro = license.isProUser();
+    const results: Array<{ file: string; r: CompressionResult }> = [];
+    for (const file of files) {
+      const content = await fs.readFile(file, "utf8").catch(() => "");
+      if (!content.trim()) continue;
+      const r = await compressor.applyCompression(content, isPro);
+      results.push({ file, r });
+    }
+    const beforeTokens = results.reduce((sum, x) => sum + (x.r.beforeTokens || 0), 0);
+    const afterTokens = results.reduce((sum, x) => sum + (x.r.afterTokens || 0), 0);
+    const savingsPercent = beforeTokens > 0 ? ((beforeTokens - afterTokens) / beforeTokens) * 100 : 0;
+    const compressible = results.filter((x) => x.r.savingsPercent >= 5);
+    const top = [...results]
+      .sort((a, b) => b.r.savingsPercent - a.r.savingsPercent)
+      .slice(0, 10)
+      .map((x) => ({
+        file: path.basename(x.file),
+        savingsPercent: x.r.savingsPercent,
+        beforeTokens: x.r.beforeTokens,
+        afterTokens: x.r.afterTokens,
+      }));
+    return {
+      sourceDir: dirPath,
+      totalFiles: results.length,
+      compressibleFiles: compressible.length,
+      beforeTokens,
+      afterTokens,
+      savingsPercent,
+      top,
+    };
+  }
+
+  const scanWorkspaceCompressionCommand = vscode.commands.registerCommand(
+    "synapse.ruleCompressor.scanWorkspace",
+    safeCommand("Scan Workspace Compression", async () => {
+      const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+      if (!workspaceRoot) {
+        vscode.window.showErrorMessage("Open a workspace first");
+        return;
+      }
+
+      const sources = await getCompressionSources(workspaceRoot);
+      const picked = await vscode.window.showQuickPick(sources, { placeHolder: "Select rules source to scan" });
+      const dirPath = picked ? picked.dir : sources[0].dir;
+
+      const summary = await scanCompression(dirPath);
+      const title = `Compression scan: ${summary.compressibleFiles}/${summary.totalFiles} compressible · ${summary.savingsPercent.toFixed(
+        1
+      )}% (${summary.beforeTokens} → ${summary.afterTokens})`;
+      const action = await vscode.window.showInformationMessage(title, "Compress Workspace");
+      if (action === "Compress Workspace") {
+        await vscode.commands.executeCommand("synapse.ruleCompressor.compressWorkspace");
+      }
+      return summary as any;
+    })
+  );
+
+  const compressWorkspaceCommand = vscode.commands.registerCommand(
+    "synapse.ruleCompressor.compressWorkspace",
+    safeCommand("Compress Workspace Rules", async () => {
+      const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+      if (!workspaceRoot) {
+        vscode.window.showErrorMessage("Open a workspace first");
+        return;
+      }
+
+      const sources = await getCompressionSources(workspaceRoot);
+      const picked = await vscode.window.showQuickPick(sources, { placeHolder: "Select rules source to compress" });
+      const dirPath = picked ? picked.dir : sources[0].dir;
+
+      const files = await loadTextFiles(dirPath, [".synapse", ".md", ".mdc", ".txt", ".xml", ".rules"]);
+      const isPro = license.isProUser();
+      const results: Array<{ filePath: string; content: string; r: CompressionResult }> = [];
+      for (const filePath of files) {
+        const content = await fs.readFile(filePath, "utf8").catch(() => "");
+        if (!content.trim()) continue;
+        const r = await compressor.applyCompression(content, isPro);
+        results.push({ filePath, content, r });
+      }
+
+      const compressible = results.filter((x) => x.r.savingsPercent >= 5).sort((a, b) => b.r.savingsPercent - a.r.savingsPercent);
+      if (compressible.length === 0) {
+        vscode.window.showInformationMessage("No rules exceeded the compression threshold (5%).");
+        return;
+      }
+
+      const pickedAction = await vscode.window.showQuickPick(
+        [
+          { label: "Apply all compressible", value: "applyAll" as const, description: `${compressible.length} file(s)` },
+          { label: "Review one (diff)", value: "reviewOne" as const, description: "Pick a file and decide Apply/Keep" },
+        ],
+        { placeHolder: "Compression actions" }
+      );
+      if (!pickedAction) return;
+
+      const showDiff = async (filePath: string, compressedText: string) => {
+        const key = `compress/${filePath}`;
+        virtualDocs.set(key, compressedText);
+        const right = vscode.Uri.parse(`synapse-virtual:/${encodeURIComponent(key)}`);
+        await vscode.commands.executeCommand("vscode.diff", vscode.Uri.file(filePath), right, "Synapse: Compression Preview");
+      };
+
+      const applyFile = async (filePath: string, compressedText: string) => {
+        await fs.writeFile(filePath, compressedText, "utf8");
+      };
+
+      if (pickedAction.value === "applyAll") {
+        for (const item of compressible) {
+          await applyFile(item.filePath, item.r.compressedText);
+        }
+        const totalBefore = compressible.reduce((s, x) => s + x.r.beforeTokens, 0);
+        const totalAfter = compressible.reduce((s, x) => s + x.r.afterTokens, 0);
+        const saved = totalBefore > 0 ? ((totalBefore - totalAfter) / totalBefore) * 100 : 0;
+        vscode.window.showInformationMessage(
+          `Compressed ${compressible.length} file(s): ${saved.toFixed(1)}% (${totalBefore} → ${totalAfter})`
+        );
+        return;
+      }
+
+      const filePick = await vscode.window.showQuickPick(
+        compressible.map((x) => ({
+          label: path.basename(x.filePath),
+          description: `${x.r.savingsPercent.toFixed(1)}% (${x.r.beforeTokens} → ${x.r.afterTokens})`,
+          filePath: x.filePath,
+          compressedText: x.r.compressedText,
+        })),
+        { placeHolder: "Select a rule to review" }
+      );
+      if (!filePick) return;
+
+      await showDiff(filePick.filePath, filePick.compressedText);
+      const decision = await vscode.window.showInformationMessage("Apply this compression?", "Apply", "Keep");
+      if (decision === "Apply") {
+        await applyFile(filePick.filePath, filePick.compressedText);
+        vscode.window.showInformationMessage("Compression applied.");
+      }
     })
   );
 
@@ -924,14 +1142,16 @@ Use meaningful variable names
     detectCommand, // NEW:
     syncDictionaryCommand,
     compressSelectionCommand,
+    scanWorkspaceCompressionCommand,
+    compressWorkspaceCommand,
     wsConnectCommand,
     wsDisconnectCommand,
     cleanupCommand,
     vscode.window.registerWebviewViewProvider("synapseActionsView", actionsProvider),
     vscode.window.registerWebviewViewProvider("synapseCostDashboard", dashboardProvider),
     vscode.window.registerWebviewViewProvider("synapseSynergyView", synergyProvider),
-    vscode.window.registerWebviewViewProvider("synapseConflictDetectionView", placeholderProvider),
-    vscode.window.registerWebviewViewProvider("synapseTokenAnalysisView", placeholderProvider)
+    vscode.window.registerWebviewViewProvider("synapseConflictDetectionView", conflictsProvider),
+    vscode.window.registerWebviewViewProvider("synapseTokenAnalysisView", tokenAnalysisProvider)
   );
 
   return { isProUser };

@@ -73,6 +73,8 @@
     "onCommand:synapse.optimize",
     "onCommand:synapse.backup",
     "onCommand:synapse.compressSelection",
+    "onCommand:synapse.ruleCompressor.scanWorkspace",
+    "onCommand:synapse.ruleCompressor.compressWorkspace",
     "onCommand:synapse.ruleCompressor.syncDictionary",
     "onCommand:synapse.cleanup"
   ],
@@ -157,6 +159,16 @@
       {
         "command": "synapse.compressSelection",
         "title": "Synapse: Compress Selection",
+        "category": "Synapse"
+      },
+      {
+        "command": "synapse.ruleCompressor.scanWorkspace",
+        "title": "Synapse: Scan Workspace Compression",
+        "category": "Synapse"
+      },
+      {
+        "command": "synapse.ruleCompressor.compressWorkspace",
+        "title": "Synapse: Compress Workspace Rules",
         "category": "Synapse"
       },
       {

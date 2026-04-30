@@ -4,8 +4,18 @@ import * as path from "path";
 
 export class ActionsViewProvider implements vscode.WebviewViewProvider {
   private view?: vscode.WebviewView;
+  private lastTelemetry?: { savingsPercent: number; beforeTokens: number; afterTokens: number };
 
   constructor(private readonly extensionUri: vscode.Uri) {}
+
+  postCompressionTelemetry(payload: { savingsPercent: number; beforeTokens: number; afterTokens: number }) {
+    this.lastTelemetry = payload;
+    try {
+      void this.view?.webview.postMessage({ command: "compressionTelemetry", data: payload });
+    } catch {
+      void 0;
+    }
+  }
 
   resolveWebviewView(
     webviewView: vscode.WebviewView,
@@ -23,6 +33,13 @@ export class ActionsViewProvider implements vscode.WebviewViewProvider {
     };
 
     webviewView.webview.html = this.getHtml();
+    if (this.lastTelemetry) {
+      try {
+        void webviewView.webview.postMessage({ command: "compressionTelemetry", data: this.lastTelemetry });
+      } catch {
+        void 0;
+      }
+    }
 
     webviewView.webview.onDidReceiveMessage(async (message) => {
       switch (message?.command) {
@@ -31,6 +48,30 @@ export class ActionsViewProvider implements vscode.WebviewViewProvider {
           break;
         case "analyze":
           await vscode.commands.executeCommand("synapse.analyze");
+          break;
+        case "detect":
+          await vscode.commands.executeCommand("synapse.detect");
+          break;
+        case "optimize":
+          await vscode.commands.executeCommand("synapse.optimize");
+          break;
+        case "scanCompression":
+          await vscode.commands.executeCommand("synapse.ruleCompressor.scanWorkspace");
+          break;
+        case "compressWorkspace":
+          await vscode.commands.executeCommand("synapse.ruleCompressor.compressWorkspace");
+          break;
+        case "compressSelection":
+          await vscode.commands.executeCommand("synapse.compressSelection");
+          break;
+        case "openRule":
+          if (typeof message?.path === "string" && message.path.trim()) {
+            const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+            if (!workspaceRoot) return;
+            const fullPath = path.join(workspaceRoot, ".synapse", "rules", message.path);
+            const doc = await vscode.workspace.openTextDocument(vscode.Uri.file(fullPath));
+            await vscode.window.showTextDocument(doc, { preview: false });
+          }
           break;
         case "getRules":
           await this.sendRules();
@@ -101,7 +142,13 @@ export class ActionsViewProvider implements vscode.WebviewViewProvider {
       <h3>Synapse Actions</h3>
       <button id="syncBtn">🔄 Sync All Rules</button>
       <button id="analyzeBtn">📊 Analyze Tokens</button>
+      <button id="detectBtn">⚠️ Detect Conflicts</button>
+      <button id="optimizeBtn">🛠 Optimize Rules</button>
+      <button id="scanBtn">🧠 Scan Compression</button>
+      <button id="compressBtn">🗜 Compress Workspace</button>
+      <button id="compressSelBtn">🗜 Compress Current File</button>
       <div id="syncStatus" class="sync-status">Ready</div>
+      <div id="compressionStatus" class="sync-status">Tokens Saved: —</div>
       <h4>Rules</h4>
       <div id="rulesList">Loading...</div>
 
@@ -117,16 +164,51 @@ export class ActionsViewProvider implements vscode.WebviewViewProvider {
           vscode.postMessage({ command: 'analyze' });
         };
 
+        document.getElementById('detectBtn').onclick = () => {
+          vscode.postMessage({ command: 'detect' });
+        };
+
+        document.getElementById('optimizeBtn').onclick = () => {
+          vscode.postMessage({ command: 'optimize' });
+        };
+
+        document.getElementById('scanBtn').onclick = () => {
+          vscode.postMessage({ command: 'scanCompression' });
+        };
+
+        document.getElementById('compressBtn').onclick = () => {
+          vscode.postMessage({ command: 'compressWorkspace' });
+        };
+
+        document.getElementById('compressSelBtn').onclick = () => {
+          vscode.postMessage({ command: 'compressSelection' });
+        };
+
         window.addEventListener('message', event => {
           const message = event.data;
+          if (message.command === 'compressionTelemetry') {
+            const data = message.data || {};
+            const saved = typeof data.savingsPercent === 'number' ? data.savingsPercent : null;
+            const before = typeof data.beforeTokens === 'number' ? data.beforeTokens : null;
+            const after = typeof data.afterTokens === 'number' ? data.afterTokens : null;
+            const text = saved === null ? 'Tokens Saved: —' : ('Tokens Saved: ' + saved.toFixed(1) + '% (' + before + ' → ' + after + ')');
+            document.getElementById('compressionStatus').textContent = text;
+            return;
+          }
           if (message.command === 'updateRules') {
             const rulesList = document.getElementById('rulesList');
             if (!message.rules || message.rules.length === 0) {
               rulesList.innerHTML = '<p>No rules yet. Run "Synapse: Initialize Project"</p>';
             } else {
               rulesList.innerHTML = message.rules.map(r =>
-                '<div class="rule-item">📄 ' + r.name + '</div>'
+                '<div class="rule-item" data-path="' + r.path + '">📄 ' + r.name + '</div>'
               ).join('');
+              Array.from(document.querySelectorAll('.rule-item')).forEach(el => {
+                el.addEventListener('click', () => {
+                  const p = el.getAttribute('data-path') || '';
+                  vscode.postMessage({ command: 'openRule', path: p });
+                });
+              });
             }
           }
         });
