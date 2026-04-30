@@ -115,9 +115,11 @@ const TOOL_DEFS = [
   },
 ];
 
+type CallToolRequest = z.infer<typeof CallToolRequestSchema>;
+
 server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: TOOL_DEFS }));
 
-server.setRequestHandler(CallToolRequestSchema, async (request) => {
+server.setRequestHandler(CallToolRequestSchema, async (request: CallToolRequest) => {
   const { name, arguments: args } = request.params;
 
   try {
