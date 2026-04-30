@@ -7,11 +7,11 @@
   "icon": "icon.png",
   "repository": {
     "type": "git",
-    "url": "https://github.com/labs-synapse/synapse"
+    "url": "https://github.com/lcmkevin/synapse"
   },
   "homepage": "https://labs-synapse.com",
   "bugs": {
-    "url": "https://github.com/labs-synapse/synapse/issues"
+    "url": "https://github.com/lcmkevin/synapse/issues"
   },
   "license": "MIT",
   "engines": {

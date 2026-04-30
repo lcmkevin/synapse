@@ -33,6 +33,7 @@
     "build:binary:mac": "pkg . --targets node18-macos-x64,node18-macos-arm64 --out-path dist",
     "build:binary:linux": "pkg . --targets node18-linux-x64,node18-linux-arm64 --out-path dist",
     "build:all": "npm run build:binary",
+    "release:build": "pwsh -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\build-release-assets.ps1",
     "dashboard": "node ./src/server.js",
     "website:dev": "cd website && python -m http.server 3000",
     "website:build": "node -e \"require('fs-extra').removeSync('dist/website'); require('fs-extra').copySync('website','dist/website',{overwrite:true});\""
