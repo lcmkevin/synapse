@@ -12,6 +12,7 @@ import { SkillConverter } from "./features/tokenAnalysis/skillConverter";
 import { CostDashboardProvider } from "./features/costDashboard";
 import { ImportScanner } from "./features/importScanner";
 import { FormatConverter } from "./features/formatConverter";
+import { CompressionResult, RuleCompressor as FreeRuleCompressor } from "./features/ruleCompressor";
 import { UNINSTALL_FEEDBACK_URL } from "./product";
 
 let tokenCounter: TokenCounter | null = null;
@@ -172,6 +173,11 @@ type LicenseManagerLike = {
   runDiagnostics?(): Promise<void>;
 };
 
+type RuleCompressorLike = {
+  fetchLatestDictionary?: (force?: boolean) => Promise<void>;
+  applyCompression: (text: string, isPro: boolean) => CompressionResult | Promise<CompressionResult>;
+};
+
 async function loadLicenseManager(context: vscode.ExtensionContext): Promise<LicenseManagerLike> {
   const proPath = path.join(context.extensionPath, "..", "packages", "pro", "extension", "license");
   try {
@@ -191,11 +197,26 @@ async function loadLicenseManager(context: vscode.ExtensionContext): Promise<Lic
   return inst;
 }
 
+async function loadRuleCompressor(context: vscode.ExtensionContext): Promise<RuleCompressorLike> {
+  const proPath = path.join(context.extensionPath, "..", "packages", "pro", "extension", "RuleCompressor");
+  try {
+    const proModule: any = require(proPath);
+    if (proModule?.RuleCompressor) {
+      const inst: RuleCompressorLike = new proModule.RuleCompressor(context);
+      return inst;
+    }
+  } catch {
+    void 0;
+  }
+  return new FreeRuleCompressor();
+}
+
 export async function activate(context: vscode.ExtensionContext) {
   console.log("Synapse extension activated"); // NEW:
   cleanupContext = context;
 
   const license = await loadLicenseManager(context);
+  const compressor = await loadRuleCompressor(context);
   const output = vscode.window.createOutputChannel("Synapse");
   context.subscriptions.push(output);
 
@@ -822,6 +843,71 @@ Use meaningful variable names
   const synergyProvider = new SynergyViewProvider(context.extensionUri);
   const dashboardProvider = new CostDashboardProvider(context);
 
+  const syncDictionaryCommand = vscode.commands.registerCommand(
+    "synapse.ruleCompressor.syncDictionary",
+    safeCommand("Sync Rule Compressor Dictionary", async () => {
+      if (!license.isProUser()) {
+        vscode.window.showWarningMessage("Rule Compressor dictionary sync is a Pro feature.");
+        return;
+      }
+      if (typeof compressor.fetchLatestDictionary !== "function") {
+        vscode.window.showWarningMessage("Dictionary sync engine not available in this build.");
+        return;
+      }
+      await compressor.fetchLatestDictionary(true);
+      vscode.window.showInformationMessage("✅ Rule Compressor dictionary updated.");
+    })
+  );
+
+  const compressSelectionCommand = vscode.commands.registerCommand(
+    "synapse.compressSelection",
+    safeCommand("Compress Selection", async () => {
+      const editor = vscode.window.activeTextEditor;
+      if (!editor) {
+        vscode.window.showErrorMessage("Open a file first");
+        return;
+      }
+
+      const selection = editor.selection;
+      const hasSelection = selection && !selection.isEmpty;
+      const inputText = hasSelection ? editor.document.getText(selection) : editor.document.getText();
+      if (!String(inputText || "").trim()) {
+        vscode.window.showWarningMessage("Nothing to compress.");
+        return;
+      }
+
+      const isPro = license.isProUser();
+      if (isPro && typeof compressor.fetchLatestDictionary === "function") {
+        try {
+          await compressor.fetchLatestDictionary(false);
+        } catch {
+          void 0;
+        }
+      }
+
+      const result = await compressor.applyCompression(inputText, isPro);
+
+      const targetRange = hasSelection
+        ? selection
+        : new vscode.Range(editor.document.positionAt(0), editor.document.positionAt(editor.document.getText().length));
+
+      const applied = await editor.edit((editBuilder) => {
+        editBuilder.replace(targetRange, result.compressedText);
+      });
+      if (!applied) {
+        vscode.window.showErrorMessage("Failed to apply compression.");
+        return;
+      }
+
+      synergyProvider.postCompressionTelemetry({
+        savingsPercent: result.savingsPercent,
+        beforeTokens: result.beforeTokens,
+        afterTokens: result.afterTokens,
+      });
+      vscode.window.showInformationMessage(`Tokens Saved: ${result.savingsPercent.toFixed(1)}%`);
+    })
+  );
+
   context.subscriptions.push(
     initCommand,
     importFromIdeCommand,
@@ -836,6 +922,8 @@ Use meaningful variable names
     optimizeCommand,
     backupCommand,
     detectCommand, // NEW:
+    syncDictionaryCommand,
+    compressSelectionCommand,
     wsConnectCommand,
     wsDisconnectCommand,
     cleanupCommand,
