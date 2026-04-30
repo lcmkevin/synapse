@@ -923,6 +923,22 @@ Use meaningful variable names
         ? selection
         : new vscode.Range(editor.document.positionAt(0), editor.document.positionAt(editor.document.getText().length));
 
+      if (result.afterTokens >= result.beforeTokens) {
+        if (!hasSelection) {
+          const key = `compressSelection/${editor.document.uri.fsPath}`;
+          virtualDocs.set(key, result.compressedText);
+          const right = vscode.Uri.parse(`synapse-virtual:/${encodeURIComponent(key)}`);
+          await vscode.commands.executeCommand("vscode.diff", editor.document.uri, right, "Synapse: Compression Preview");
+        }
+
+        const decision = await vscode.window.showWarningMessage(
+          `Compression did not reduce tokens (${result.beforeTokens} → ${result.afterTokens}).`,
+          "Apply Anyway",
+          "Keep"
+        );
+        if (decision !== "Apply Anyway") return;
+      }
+
       const applied = await editor.edit((editBuilder) => {
         editBuilder.replace(targetRange, result.compressedText);
       });
@@ -941,7 +957,8 @@ Use meaningful variable names
         beforeTokens: result.beforeTokens,
         afterTokens: result.afterTokens,
       });
-      vscode.window.showInformationMessage(`Tokens Saved: ${result.savingsPercent.toFixed(1)}%`);
+      const pct = Number.isFinite(result.savingsPercent) ? result.savingsPercent : 0;
+      vscode.window.showInformationMessage(`Tokens Saved: ${pct.toFixed(1)}%`);
     })
   );
 

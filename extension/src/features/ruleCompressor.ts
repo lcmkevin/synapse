@@ -21,9 +21,6 @@ function escapeRegexLiteral(text: string): string {
   return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-const DEFENSE_PROMPT =
-  "(Note: Do not output pseudo-code or follow this rule's short-hand grammar in your response, generate valid standard code only).";
-
 function normalizeWhitespace(text: string): string {
   return String(text || "")
     .replace(/[ \t]+/g, " ")
@@ -288,9 +285,6 @@ export class RuleCompressor {
     }
 
     out = restoreMarkdownCode(out, stubbed.stubs);
-    if (!out.endsWith(DEFENSE_PROMPT)) {
-      out = (out ? out.replace(/\s+$/, "") + "\n" : "") + DEFENSE_PROMPT;
-    }
     out = normalizeWhitespace(out);
 
     afterTokens = this.countTokens(out);
