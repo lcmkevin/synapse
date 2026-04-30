@@ -72,6 +72,8 @@
     "onCommand:synapse.importFromIDE",
     "onCommand:synapse.optimize",
     "onCommand:synapse.backup",
+    "onCommand:synapse.compressSelection",
+    "onCommand:synapse.ruleCompressor.syncDictionary",
     "onCommand:synapse.cleanup"
   ],
   "main": "./out/extension.js",
@@ -150,6 +152,16 @@
       {
         "command": "synapse.backup",
         "title": "Synapse: Backup",
+        "category": "Synapse"
+      },
+      {
+        "command": "synapse.compressSelection",
+        "title": "Synapse: Compress Selection",
+        "category": "Synapse"
+      },
+      {
+        "command": "synapse.ruleCompressor.syncDictionary",
+        "title": "Synapse: Sync Rule Compressor Dictionary (Pro)",
         "category": "Synapse"
       },
       {

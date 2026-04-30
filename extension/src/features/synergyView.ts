@@ -78,7 +78,18 @@ function hasDestructiveSafetyRule(allTextLower: string): boolean {
 export class SynergyViewProvider implements vscode.WebviewViewProvider {
   constructor(private readonly extensionUri: vscode.Uri) {}
 
+  private view?: vscode.WebviewView;
+
+  postCompressionTelemetry(payload: { savingsPercent: number; beforeTokens: number; afterTokens: number }) {
+    try {
+      void this.view?.webview.postMessage({ command: "compressionTelemetry", data: payload });
+    } catch {
+      void 0;
+    }
+  }
+
   resolveWebviewView(webviewView: vscode.WebviewView) {
+    this.view = webviewView;
     webviewView.webview.options = {
       enableScripts: true,
       localResourceRoots: [this.extensionUri],
@@ -134,6 +145,16 @@ export class SynergyViewProvider implements vscode.WebviewViewProvider {
         terminal.sendText(`cd "${workspaceRoot}"`);
         const cli = await getCliInvocation(workspaceRoot);
         terminal.sendText(`${cli} optimize --backup --apply`);
+        return;
+      }
+
+      if (message?.command === "compressSelection") {
+        await vscode.commands.executeCommand("synapse.compressSelection");
+        return;
+      }
+
+      if (message?.command === "syncDictionary") {
+        await vscode.commands.executeCommand("synapse.ruleCompressor.syncDictionary");
         return;
       }
 
@@ -194,6 +215,14 @@ export class SynergyViewProvider implements vscode.WebviewViewProvider {
 
   <div class="card">
     <div class="row">
+      <button onclick="compressSelection()">Compress Selection</button>
+      <button onclick="syncDictionary()">Sync Pro Dictionary</button>
+    </div>
+    <div id="compression" class="muted" style="margin-top:8px">Tokens Saved: —</div>
+  </div>
+
+  <div class="card">
+    <div class="row">
       <button onclick="optAnalyze()">Analyze (Optimizer)</button>
       <button onclick="optApply()">Apply Suggestions</button>
       <button onclick="refresh()">Refresh</button>
@@ -226,9 +255,20 @@ export class SynergyViewProvider implements vscode.WebviewViewProvider {
     function reviewDupes() { vscode.postMessage({ command: 'reviewDuplicates' }); }
     function openToken() { vscode.postMessage({ command: 'openTemplate', kind: 'token' }); }
     function openSafety() { vscode.postMessage({ command: 'openTemplate', kind: 'safety' }); }
+    function compressSelection() { vscode.postMessage({ command: 'compressSelection' }); }
+    function syncDictionary() { vscode.postMessage({ command: 'syncDictionary' }); }
 
     window.addEventListener('message', event => {
       const msg = event.data;
+      if (msg.command === 'compressionTelemetry') {
+        const data = msg.data || {};
+        const saved = typeof data.savingsPercent === 'number' ? data.savingsPercent : null;
+        const before = typeof data.beforeTokens === 'number' ? data.beforeTokens : null;
+        const after = typeof data.afterTokens === 'number' ? data.afterTokens : null;
+        const text = saved === null ? 'Tokens Saved: —' : ('Tokens Saved: ' + saved.toFixed(1) + '% (' + before + ' → ' + after + ')');
+        document.getElementById('compression').textContent = text;
+        return;
+      }
       if (msg.command !== 'update') return;
       const data = msg.data || {};
       if (!data.hasWorkspace) {
