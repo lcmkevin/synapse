@@ -341,11 +341,58 @@ body {
 .comparison-wrapper { 
     background: white; 
     border-radius: 24px; 
-    overflow: hidden; 
+    overflow: auto; 
     box-shadow: 0 4px 20px rgba(0,0,0,0.05); 
     border: 1px solid var(--gray); 
+    -webkit-overflow-scrolling: touch;
+    position: relative;
 } 
  
+.comparison-wrapper table {
+    width: 100%;
+    border-collapse: collapse;
+    min-width: 760px;
+}
+
+.comparison-wrapper thead th {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    background: linear-gradient(90deg, rgba(15, 23, 42, 1) 0%, rgba(30, 41, 59, 1) 100%);
+    color: white;
+    padding: 1rem;
+    text-align: left;
+    font-weight: 700;
+    letter-spacing: 0.2px;
+}
+
+.comparison-wrapper tbody td {
+    padding: 1rem;
+    border-bottom: 1px solid rgba(226, 232, 255, 0.85);
+}
+
+.comparison-wrapper tbody tr:nth-child(even) td {
+    background: rgba(248, 250, 252, 0.75);
+}
+
+.comparison-wrapper tbody tr:hover td {
+    background: rgba(59, 130, 246, 0.06);
+}
+
+.comparison-wrapper td.check,
+.comparison-wrapper td.cross,
+.comparison td.check,
+.comparison td.cross {
+    text-align: center;
+    font-weight: 800;
+    letter-spacing: 0.3px;
+}
+
+.comparison-wrapper td:first-child,
+.comparison td:first-child {
+    font-weight: 600;
+}
+
 .comparison table { 
     width: 100%; 
     border-collapse: collapse; 

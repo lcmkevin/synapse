@@ -70,6 +70,13 @@
           </button>
 
           <div id="err" class="note" style="margin-top: 1rem; display: none; border-color: rgba(239, 68, 68, 0.25); background: rgba(239, 68, 68, 0.06)"></div>
+          <a
+            id="resendLink"
+            href="../resend/"
+            class="btn btn-outline"
+            style="margin-top: 0.75rem; width: 100%; justify-content: center; display: none"
+            >Resend license email →</a
+          >
         </div>
       </div>
     </section>
@@ -78,16 +85,28 @@
       const payBtn = document.getElementById("payBtn");
       const emailEl = document.getElementById("email");
       const errEl = document.getElementById("err");
+      const resendLink = document.getElementById("resendLink");
 
       function setError(msg) {
         if (!errEl) return;
         if (!msg) {
           errEl.style.display = "none";
           errEl.textContent = "";
+          if (resendLink) resendLink.style.display = "none";
           return;
         }
         errEl.style.display = "block";
         errEl.textContent = msg;
+      }
+
+      function maybeShowResend(email, reason) {
+        const e = typeof email === "string" ? email.trim() : "";
+        const r = typeof reason === "string" ? reason : "";
+        const looksLikeExisting = /license already exists|already exists|already have|already purchased/i.test(r);
+        if (!resendLink || !looksLikeExisting) return;
+        const target = e ? `../resend/?email=${encodeURIComponent(e)}` : "../resend/";
+        resendLink.setAttribute("href", target);
+        resendLink.style.display = "inline-flex";
       }
 
       async function startCheckout() {
@@ -143,6 +162,11 @@
             (resp.status === 409 ? "License already exists for this email. Use the resend page to retrieve it." : "") ||
             "Checkout failed.";
           setError(errMsg);
+          if (resp.status === 409) {
+            maybeShowResend(email, errMsg);
+          } else {
+            maybeShowResend(email, errMsg);
+          }
           if (hint && errEl) {
             errEl.textContent = `${errMsg} ${hint}`;
           }
