@@ -46,7 +46,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: "18"
+          node-version: "20"
 
       - name: Install deps (skip scripts)
         run: npm install --ignore-scripts
@@ -121,7 +121,9 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: synapse-binaries
-          path: dist/
+          path: |
+            dist/synapse-*.zip
+            dist/synapse-*.tar.gz
 
   vsix:
     runs-on: ubuntu-latest
@@ -134,7 +136,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: "18"
+          node-version: "20"
 
       - name: Install extension deps (skip scripts)
         run: npm --prefix extension install --ignore-scripts
@@ -177,4 +179,6 @@ jobs:
           tag_name: ${{ needs.setup.outputs.tag }}
           fail_on_unmatched_files: false
           files: |
-            release-assets/**/*
+            release-assets/**/synapse.vsix
+            release-assets/**/synapse-*.zip
+            release-assets/**/synapse-*.tar.gz
