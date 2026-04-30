@@ -15,15 +15,55 @@ type CompiledUnion = {
   replaceByGroup: Record<string, string>;
 };
 
+type CodeStub = { placeholder: string; content: string };
+
 function escapeRegexLiteral(text: string): string {
   return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
+
+const DEFENSE_PROMPT =
+  "(Note: Do not output pseudo-code or follow this rule's short-hand grammar in your response, generate valid standard code only).";
 
 function normalizeWhitespace(text: string): string {
   return String(text || "")
     .replace(/[ \t]+/g, " ")
     .replace(/\n\s*\n+/g, "\n")
     .trim();
+}
+
+function preserveFirstLetterCase(original: string, replacement: string): string {
+  const o = String(original || "");
+  const r = String(replacement || "");
+  const oc = o.charAt(0);
+  const rc = r.charAt(0);
+  if (oc >= "A" && oc <= "Z" && rc >= "a" && rc <= "z") return rc.toUpperCase() + r.slice(1);
+  return r;
+}
+
+function stubMarkdownCode(text: string): { text: string; stubs: CodeStub[] } {
+  const stubs: CodeStub[] = [];
+  let idx = 0;
+
+  const make = (content: string) => {
+    const placeholder = `__STUB_${idx++}__`;
+    stubs.push({ placeholder, content });
+    return placeholder;
+  };
+
+  let out = String(text || "");
+  out = out.replace(/```[\s\S]*?```/g, (m) => make(m));
+  out = out.replace(/`[^`\n]+`/g, (m) => make(m));
+
+  return { text: out, stubs };
+}
+
+function restoreMarkdownCode(text: string, stubs: CodeStub[]): string {
+  let out = String(text || "");
+  for (const s of stubs) {
+    if (!s.placeholder) continue;
+    out = out.split(s.placeholder).join(s.content);
+  }
+  return out;
 }
 
 const VERB_STEMS = new Set<string>([
@@ -94,7 +134,7 @@ function applyUnion(text: string, dict: CompiledUnion): string {
       for (const k of Object.keys(groups)) {
         if (groups[k] !== undefined) {
           const repl = dict.replaceByGroup[k];
-          return repl !== undefined ? repl : args[0];
+          return repl !== undefined ? preserveFirstLetterCase(String(args[0] || ""), repl) : args[0];
         }
       }
     }
@@ -225,7 +265,8 @@ export class RuleCompressor {
     const raw = String(text || "");
     const beforeTokens = this.countTokens(raw);
 
-    let out = normalizeWhitespace(stripFillerOpenings(raw));
+    const stubbed = stubMarkdownCode(raw);
+    let out = normalizeWhitespace(stripFillerOpenings(stubbed.text));
     out = this.applyFree(out);
     out = normalizeWhitespace(out);
 
@@ -233,7 +274,7 @@ export class RuleCompressor {
     let savingsPercent = beforeTokens > 0 ? ((beforeTokens - afterTokens) / beforeTokens) * 100 : 0;
 
     if (savingsPercent < 5) {
-      const lm = await this.compressWithNativeLM(raw);
+      const lm = await this.compressWithNativeLM(stubbed.text);
       if (lm) {
         const lmText = normalizeWhitespace(stripFillerOpenings(lm));
         const lmAfter = this.countTokens(lmText);
@@ -245,6 +286,15 @@ export class RuleCompressor {
         }
       }
     }
+
+    out = restoreMarkdownCode(out, stubbed.stubs);
+    if (!out.endsWith(DEFENSE_PROMPT)) {
+      out = (out ? out.replace(/\s+$/, "") + "\n" : "") + DEFENSE_PROMPT;
+    }
+    out = normalizeWhitespace(out);
+
+    afterTokens = this.countTokens(out);
+    savingsPercent = beforeTokens > 0 ? ((beforeTokens - afterTokens) / beforeTokens) * 100 : 0;
 
     return {
       compressedText: out,
