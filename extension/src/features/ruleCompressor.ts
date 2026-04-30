@@ -1,4 +1,5 @@
 import { encoding_for_model, get_encoding } from "tiktoken";
+import * as vscode from "vscode";
 
 export type CompressionResult = {
   compressedText: string;
@@ -9,9 +10,9 @@ export type CompressionResult = {
 
 type ReplacementPair = { find: string; replace: string };
 
-type CompiledDictionary = {
+type CompiledUnion = {
   regex: RegExp | null;
-  lookup: Map<string, string>;
+  replaceByGroup: Record<string, string>;
 };
 
 function escapeRegexLiteral(text: string): string {
@@ -25,28 +26,79 @@ function normalizeWhitespace(text: string): string {
     .trim();
 }
 
-function compileUnionDictionary(pairs: ReplacementPair[]): CompiledDictionary {
-  const lookup = new Map<string, string>();
-  const escaped = pairs
-    .map((p) => ({ find: String(p.find || "").trim().toLowerCase(), replace: String(p.replace ?? "") }))
-    .filter((p) => p.find.length > 0)
-    .sort((a, b) => b.find.length - a.find.length)
-    .map((p) => {
-      lookup.set(p.find, p.replace);
-      return escapeRegexLiteral(p.find);
-    });
+const VERB_STEMS = new Set<string>([
+  "require",
+  "ensure",
+  "recommend",
+  "consider",
+  "use",
+  "handle",
+  "investigate",
+  "try",
+  "make",
+  "provide",
+  "avoid",
+  "note",
+  "remember",
+  "prefer",
+  "validate",
+  "apply",
+  "create",
+  "update",
+  "sync",
+]);
 
-  if (escaped.length === 0) return { regex: null, lookup };
-  const union = `\\b(${escaped.join("|")})\\b`;
-  return { regex: new RegExp(union, "gi"), lookup };
+function phraseToFuzzyPattern(phrase: string): string {
+  const tokens = String(phrase || "")
+    .trim()
+    .toLowerCase()
+    .split(/\s+/)
+    .filter(Boolean);
+  if (tokens.length === 0) return "";
+
+  const parts = tokens.map((t) => {
+    const escaped = escapeRegexLiteral(t);
+    if (VERB_STEMS.has(t)) return `\\b${escaped}\\w*\\b`;
+    return `\\b${escaped}\\b`;
+  });
+
+  return parts.join("\\s+");
 }
 
-function applyUnion(text: string, dict: CompiledDictionary): string {
+function compileFuzzyUnion(pairs: ReplacementPair[]): CompiledUnion {
+  const cleaned = pairs
+    .map((p) => ({ find: String(p.find || "").trim(), replace: String(p.replace ?? "") }))
+    .filter((p) => p.find.length > 0)
+    .sort((a, b) => b.find.length - a.find.length);
+
+  const replaceByGroup: Record<string, string> = {};
+  const branches: string[] = [];
+
+  for (let i = 0; i < cleaned.length; i++) {
+    const group = `p${i}`;
+    const pattern = phraseToFuzzyPattern(cleaned[i].find);
+    if (!pattern) continue;
+    replaceByGroup[group] = cleaned[i].replace;
+    branches.push(`(?<${group}>${pattern})`);
+  }
+
+  if (branches.length === 0) return { regex: null, replaceByGroup };
+  return { regex: new RegExp(branches.join("|"), "gi"), replaceByGroup };
+}
+
+function applyUnion(text: string, dict: CompiledUnion): string {
   if (!dict.regex) return text;
-  return text.replace(dict.regex, (matched) => {
-    const key = matched.toLowerCase();
-    const replacement = dict.lookup.get(key);
-    return replacement !== undefined ? replacement : matched;
+  return text.replace(dict.regex, (...args: any[]) => {
+    const groups = args && args.length > 0 ? args[args.length - 1] : null;
+    if (groups && typeof groups === "object") {
+      for (const k of Object.keys(groups)) {
+        if (groups[k] !== undefined) {
+          const repl = dict.replaceByGroup[k];
+          return repl !== undefined ? repl : args[0];
+        }
+      }
+    }
+    return args[0];
   });
 }
 
@@ -62,6 +114,50 @@ function approximateTokenCount(text: string): number {
   const approx = asciiCount / 4 + nonAsciiCount;
   const rounded = Math.ceil(approx);
   return Number.isFinite(rounded) && rounded > 0 ? rounded : 0;
+}
+
+const FILLER_OPENINGS: string[] = [
+  "i would like to ask you to",
+  "i would like to ask",
+  "i would like to",
+  "i want to ask you to",
+  "i want to ask",
+  "i want you to",
+  "i'd like to",
+  "could you please",
+  "can you please",
+  "would you please",
+  "please",
+];
+
+const FILLER_OPENING_REGEXES: RegExp[] = FILLER_OPENINGS.map((p) => {
+  const pattern = phraseToFuzzyPattern(p);
+  return pattern ? new RegExp(`^\\s*(?:${pattern})\\s+`, "i") : /^$/i;
+});
+
+function stripFillerOpenings(text: string): string {
+  const lines = String(text || "").split(/\r?\n/);
+  const outLines: string[] = [];
+
+  for (const line of lines) {
+    const segments = String(line || "").match(/[^.!?]+[.!?]?/g) || [line];
+    const rebuilt: string[] = [];
+
+    for (let seg of segments) {
+      const trimmed = seg.trimStart();
+      const openerIndex = FILLER_OPENING_REGEXES.findIndex((re) => re.test(trimmed));
+      if (openerIndex >= 0) {
+        seg = trimmed.replace(FILLER_OPENING_REGEXES[openerIndex], "");
+        seg = seg.replace(/^\s*[,;:\-–—]+\s*/, "");
+        seg = seg.trimStart();
+      }
+      rebuilt.push(seg);
+    }
+
+    outLines.push(rebuilt.join("").trimEnd());
+  }
+
+  return outLines.join("\n");
 }
 
 export class RuleCompressor {
@@ -119,22 +215,36 @@ export class RuleCompressor {
   ];
 
   private static encoder: any | null = null;
-  private static compiledFree: CompiledDictionary | null = null;
+  private static compiledFree: CompiledUnion | null = null;
 
   async fetchLatestDictionary(): Promise<void> {
     return;
   }
 
-  applyCompression(text: string, _isPro: boolean): CompressionResult {
+  async applyCompression(text: string, _isPro: boolean): Promise<CompressionResult> {
     const raw = String(text || "");
     const beforeTokens = this.countTokens(raw);
 
-    let out = normalizeWhitespace(raw);
+    let out = normalizeWhitespace(stripFillerOpenings(raw));
     out = this.applyFree(out);
     out = normalizeWhitespace(out);
 
-    const afterTokens = this.countTokens(out);
-    const savingsPercent = beforeTokens > 0 ? ((beforeTokens - afterTokens) / beforeTokens) * 100 : 0;
+    let afterTokens = this.countTokens(out);
+    let savingsPercent = beforeTokens > 0 ? ((beforeTokens - afterTokens) / beforeTokens) * 100 : 0;
+
+    if (savingsPercent < 5) {
+      const lm = await this.compressWithNativeLM(raw);
+      if (lm) {
+        const lmText = normalizeWhitespace(stripFillerOpenings(lm));
+        const lmAfter = this.countTokens(lmText);
+        const lmSavings = beforeTokens > 0 ? ((beforeTokens - lmAfter) / beforeTokens) * 100 : 0;
+        if (Number.isFinite(lmSavings) && lmSavings > savingsPercent) {
+          out = lmText;
+          afterTokens = lmAfter;
+          savingsPercent = lmSavings;
+        }
+      }
+    }
 
     return {
       compressedText: out,
@@ -146,9 +256,56 @@ export class RuleCompressor {
 
   private applyFree(text: string): string {
     if (!RuleCompressor.compiledFree) {
-      RuleCompressor.compiledFree = compileUnionDictionary(RuleCompressor.FREE_DEFAULT_REPLACEMENTS);
+      RuleCompressor.compiledFree = compileFuzzyUnion(RuleCompressor.FREE_DEFAULT_REPLACEMENTS);
     }
     return applyUnion(text, RuleCompressor.compiledFree);
+  }
+
+  private async compressWithNativeLM(text: string): Promise<string | null> {
+    const lmApi: any = (vscode as any).lm;
+    const msgApi: any = (vscode as any).LanguageModelChatMessage;
+    if (!lmApi || typeof lmApi.selectChatModels !== "function" || !msgApi || typeof msgApi.User !== "function") return null;
+
+    let model: any = null;
+    try {
+      const models = await lmApi.selectChatModels({ vendor: "copilot", family: "gpt-4o" });
+      model = Array.isArray(models) ? models[0] : null;
+    } catch {
+      model = null;
+    }
+    if (!model || typeof model.sendRequest !== "function") return null;
+
+    const systemPrompt = "Act as a prompt compressor. Remove fluff, greetings, and filler words from the following rule. Keep it strictly imperative.";
+    const messages = [msgApi.User(systemPrompt), msgApi.User(String(text || ""))];
+
+    const cts = new vscode.CancellationTokenSource();
+    const timeout = setTimeout(() => {
+      try {
+        cts.cancel();
+      } catch {
+        void 0;
+      }
+    }, 4000);
+
+    try {
+      const resp = await model.sendRequest(messages, {}, cts.token);
+      let out = "";
+      if (resp && resp.text && Symbol.asyncIterator in resp.text) {
+        for await (const fragment of resp.text) out += fragment;
+      } else if (typeof resp?.text === "string") {
+        out = resp.text;
+      }
+      return out && typeof out === "string" ? out : null;
+    } catch {
+      return null;
+    } finally {
+      clearTimeout(timeout);
+      try {
+        cts.dispose();
+      } catch {
+        void 0;
+      }
+    }
   }
 
   private countTokens(text: string): number {
@@ -172,4 +329,3 @@ export class RuleCompressor {
     }
   }
 }
-
