@@ -42,5 +42,6 @@ npm-debug.log*
 .cline/
 local_docs/
 synapse-pro/
+docs/SYNAPSE_COMPLETE_REFERENCE.md
 
 !packages/pro/
