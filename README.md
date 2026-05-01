@@ -102,11 +102,23 @@ Then open:
 
 - Build: `cd extension && npm install && npm run compile`
 - Run: press `F5` to open the Extension Development Host
+- UI:
+  - Sidebar: **Synapse → Control Center**
+  - Note: CLI-backed actions (Optimize/Detect) stream logs to the **“Synapse” Output** panel (no visible terminal).
 - Commands:
   - `Synapse: Initialize Project`
   - `Synapse: Import Rules from IDE`
   - `Synapse: Sync Rules`
   - `Synapse: Add Target IDE`
+  - `Synapse: Upgrade to Pro`
+  - `Synapse: Enter License Key`
+  - `Synapse: Resend License Key`
+  - `Synapse: Forget License Key (This Machine)`
+  - `Synapse: License Diagnostics`
+
+- License storage:
+  - Stored securely in VS Code SecretStorage (survives reinstall better than globalState)
+  - Also synced to `~/.synapse/license.key` for CLI parity when needed (e.g. AutoFix)
 
 ## Universal IDE (Optional)
 
@@ -167,6 +179,8 @@ node .\bin\synapse-unified.js init
 node .\bin\synapse-unified.js sync --all --conflict prompt
 node .\bin\synapse-unified.js sync --dry-run --list-changes
 node .\bin\synapse-unified.js analyze --top 10 --threshold 2000
+node .\bin\synapse-unified.js enter-license
+node .\bin\synapse-unified.js resend-license you@example.com
 ```
 
 ### CLI (Native Binaries)

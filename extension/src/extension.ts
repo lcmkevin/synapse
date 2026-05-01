@@ -1,15 +1,14 @@
 // UPDATED: Synapse extension entry point (clean-slate)
 import * as vscode from "vscode";
+import { spawn } from "child_process";
 import * as fs from "fs/promises";
 import * as os from "os";
 import * as path from "path";
 import { AdapterManager } from "./compiler/adapter-manager"; // NEW:
 import { ActionsViewProvider } from "./features/actionsView";
-import { SynergyViewProvider } from "./features/synergyView";
 import WebSocket from "ws";
 import { AIModel, TokenCounter } from "./features/tokenAnalysis/tokenCounter";
 import { SkillConverter } from "./features/tokenAnalysis/skillConverter";
-import { CostDashboardProvider } from "./features/costDashboard";
 import { ImportScanner } from "./features/importScanner";
 import { FormatConverter } from "./features/formatConverter";
 import { CompressionResult, RuleCompressor as FreeRuleCompressor } from "./features/ruleCompressor";
@@ -34,6 +33,65 @@ async function getCliInvocation(workspaceRoot: string): Promise<string> {
   } catch {
     return "synapse";
   }
+}
+
+async function getCliCommand(workspaceRoot: string): Promise<{ command: string; args: string[]; display: string; useShell: boolean }> {
+  const localCli = path.join(workspaceRoot, "bin", "synapse-unified.js");
+  try {
+    await fs.access(localCli);
+    return {
+      command: process.execPath,
+      args: [localCli],
+      display: `node "${localCli}"`,
+      useShell: false,
+    };
+  } catch {
+    return { command: "synapse", args: [], display: "synapse", useShell: process.platform === "win32" };
+  }
+}
+
+async function runCliToOutput(
+  workspaceRoot: string,
+  cliArgs: string[],
+  output: vscode.OutputChannel,
+  label: string
+): Promise<number> {
+  const base = await getCliCommand(workspaceRoot);
+  const fullArgs = [...base.args, ...cliArgs];
+
+  output.show(true);
+  output.appendLine(`\n[${label}] ${base.display} ${cliArgs.join(" ")}`.trim());
+
+  return await new Promise<number>((resolve) => {
+    let resolved = false;
+    const done = (code: number) => {
+      if (resolved) return;
+      resolved = true;
+      resolve(code);
+    };
+
+    const child = spawn(base.command, fullArgs, {
+      cwd: workspaceRoot,
+      env: process.env,
+      shell: base.useShell,
+    });
+
+    child.stdout?.on("data", (chunk) => {
+      output.append(chunk.toString());
+    });
+    child.stderr?.on("data", (chunk) => {
+      output.append(chunk.toString());
+    });
+    child.on("error", (err) => {
+      output.appendLine(`\n[${label}] Failed to run CLI: ${err instanceof Error ? err.message : String(err)}`);
+      done(1);
+    });
+    child.on("close", (code) => {
+      const n = typeof code === "number" ? code : 1;
+      output.appendLine(`\n[${label}] Exit code: ${n}`);
+      done(n);
+    });
+  });
 }
 
 async function listBackups(): Promise<string[]> {
@@ -182,6 +240,7 @@ type LicenseManagerLike = {
   showUpgradePrompt(): Promise<void>;
   activateLicense?(key: string): Promise<boolean>;
   runDiagnostics?(): Promise<void>;
+  forgetLicenseKey?(): Promise<void>;
 };
 
 type RuleCompressorLike = {
@@ -716,6 +775,40 @@ Use meaningful variable names
     vscode.window.showInformationMessage("License key saved. Restart with Pro module to validate.");
   }));
 
+  const resendLicenseKeyCommand = vscode.commands.registerCommand("synapse.resendLicenseKey", safeCommand("Resend License Key", async () => {
+    const email = await vscode.window.showInputBox({ prompt: "Email used at checkout (optional)" });
+    const base = "https://www.labs-synapse.com/pro/resend/";
+    const url = typeof email === "string" && email.trim() ? `${base}?email=${encodeURIComponent(email.trim())}` : base;
+    await vscode.env.openExternal(vscode.Uri.parse(url));
+  }));
+
+  const forgetLicenseKeyCommand = vscode.commands.registerCommand("synapse.forgetLicenseKey", safeCommand("Forget License Key", async () => {
+    const confirm = await vscode.window.showWarningMessage(
+      "Forget Synapse Pro license on this machine? This will remove the saved key used by both the extension and the CLI.",
+      "Forget",
+      "Cancel"
+    );
+    if (confirm !== "Forget") return;
+
+    if (typeof license.forgetLicenseKey === "function") {
+      await license.forgetLicenseKey();
+    } else {
+      await context.globalState.update("licenseKey", undefined);
+      await context.globalState.update("synapse.ruleCompressor.dictionary.v1", undefined);
+      const p = path.join(os.homedir(), ".synapse", "license.key");
+      try {
+        await fs.unlink(p);
+      } catch {
+        void 0;
+      }
+    }
+
+    const picked = await vscode.window.showInformationMessage("✅ License key forgotten on this machine.", "Reload Window");
+    if (picked === "Reload Window") {
+      await vscode.commands.executeCommand("workbench.action.reloadWindow");
+    }
+  }));
+
   const licenseDiagnosticsCommand = vscode.commands.registerCommand("synapse.licenseDiagnostics", safeCommand("License Diagnostics", async () => {
     if (typeof license.runDiagnostics === "function") {
       await license.runDiagnostics();
@@ -746,12 +839,11 @@ Use meaningful variable names
       return;
     }
 
-    const terminal = vscode.window.createTerminal("Synapse Optimizer");
-    terminal.show();
-    terminal.sendText(`cd "${workspaceRoot}"`);
-    const cli = await getCliInvocation(workspaceRoot);
-    if (choice === "Analyze & Auto-Fix") terminal.sendText(`${cli} optimize --backup --apply`);
-    else terminal.sendText(`${cli} optimize --backup`);
+    const args = choice === "Analyze & Auto-Fix" ? ["optimize", "--backup", "--apply"] : ["optimize", "--backup"];
+    const code = await runCliToOutput(workspaceRoot, args, output, "Optimizer");
+    if (code !== 0) {
+      vscode.window.showErrorMessage("Optimizer failed. Open the Synapse output panel for details.");
+    }
   }));
 
   const backupCommand = vscode.commands.registerCommand("synapse.backup", safeCommand("Manage Backups", async () => {
@@ -816,11 +908,10 @@ Use meaningful variable names
       return;
     }
 
-    const terminal = vscode.window.createTerminal("Synapse Conflicts");
-    terminal.show();
-    terminal.sendText(`cd "${workspaceRoot}"`);
-    const cli = await getCliInvocation(workspaceRoot);
-    terminal.sendText(`${cli} optimize --backup`);
+    const code = await runCliToOutput(workspaceRoot, ["optimize", "--backup"], output, "Conflicts");
+    if (code !== 0) {
+      vscode.window.showErrorMessage("Conflict detection failed. Open the Synapse output panel for details.");
+    }
   }));
 
   const wsConnectCommand = vscode.commands.registerCommand("synapse.ws.connect", safeCommand("WS Connect", async () => {
@@ -851,6 +942,98 @@ Use meaningful variable names
     await promptForCleanup(context);
   }));
 
+  const bestPracticesCommand = vscode.commands.registerCommand("synapse.bestPractices", safeCommand("Apply Best Practices", async () => {
+    const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+    if (!workspaceRoot) {
+      vscode.window.showErrorMessage("Open a workspace first");
+      return;
+    }
+
+    const synapseRulesDir = path.join(workspaceRoot, ".synapse", "rules");
+    const traeRulesDir = path.join(workspaceRoot, ".trae", "rules");
+
+    const readAllRuleText = async (dirPath: string): Promise<string> => {
+      const entries = await fs.readdir(dirPath).catch(() => []);
+      const texts: string[] = [];
+      for (const f of entries) {
+        const lc = f.toLowerCase();
+        if (!(lc.endsWith(".synapse") || lc.endsWith(".md") || lc.endsWith(".mdc") || lc.endsWith(".rules") || lc.endsWith(".txt"))) continue;
+        const content = await fs.readFile(path.join(dirPath, f), "utf8").catch(() => "");
+        if (content.trim()) texts.push(content);
+      }
+      return texts.join("\n\n").toLowerCase();
+    };
+
+    const allTextLower = [await readAllRuleText(synapseRulesDir), await readAllRuleText(traeRulesDir)].join("\n\n");
+    const hasTokenHygiene = allTextLower.includes("token") && (allTextLower.includes("concise") || allTextLower.includes("cost") || allTextLower.includes("short"));
+    const hasSafety =
+      (allTextLower.includes("delete") || allTextLower.includes("drop") || allTextLower.includes("truncate")) &&
+      (allTextLower.includes("confirm") || allTextLower.includes("backup") || allTextLower.includes("migration"));
+    const hasDefense =
+      allTextLower.includes("do not output pseudo-code") ||
+      allTextLower.includes("do not output pseudocode") ||
+      allTextLower.includes("short-hand grammar") ||
+      allTextLower.includes("valid standard code only");
+
+    type BestPracticeTemplateKind = "token" | "safety" | "defense";
+    type BestPracticePick = vscode.QuickPickItem & { templateKind: BestPracticeTemplateKind };
+
+    const options: BestPracticePick[] = [];
+    if (!hasTokenHygiene) options.push({ label: "Token hygiene (concise by default)", templateKind: "token" });
+    if (!hasSafety) options.push({ label: "Safety guardrails (confirm + backup before destructive ops)", templateKind: "safety" });
+    if (!hasDefense) options.push({ label: "Response defense (avoid pseudocode/shorthand)", templateKind: "defense" });
+
+    if (options.length === 0) {
+      vscode.window.showInformationMessage("✅ Best practices already look good in this workspace.");
+      return;
+    }
+
+    const picked = await vscode.window.showQuickPick<BestPracticePick>(options, { placeHolder: "Select a best-practice template to apply" });
+    if (!picked) return;
+
+    const template =
+      picked.templateKind === "token"
+        ? `# Rule: Token hygiene\n# Description: Reduce always-on token usage\n\nKeep responses concise by default.\nExpand only when asked.\n\n# Constraints:\n# @constraint **/*\n`
+        : picked.templateKind === "safety"
+          ? `# Rule: Safety guardrails\n# Description: Prevent accidental destructive operations\n\nNever run destructive operations (e.g., DROP/TRUNCATE/DELETE on production data) without explicit user confirmation.\nRequire a backup/rollback plan before executing irreversible changes.\n\n# Constraints:\n# @constraint **/*\n`
+          : `# Rule: Response defense prompt\n# Description: Prevent shorthand/pseudocode responses\n\nDo not output pseudo-code or follow this rule's short-hand grammar in your response; generate valid standard code only.\n\n# Constraints:\n# @constraint **/*\n`;
+
+    const dest = await vscode.window.showQuickPick(
+      [
+        { label: "Create a new Synapse rule file", value: "create" as const },
+        { label: "Insert into current editor", value: "insert" as const },
+      ],
+      { placeHolder: "Apply template" }
+    );
+    if (!dest) return;
+
+    if (dest.value === "insert") {
+      const editor = vscode.window.activeTextEditor;
+      if (!editor) {
+        vscode.window.showErrorMessage("Open a file first");
+        return;
+      }
+      await editor.edit((b) => b.insert(editor.selection.active, (editor.selection.isEmpty ? "\n\n" : "") + template));
+      return;
+    }
+
+    await fs.mkdir(synapseRulesDir, { recursive: true });
+    const fileName =
+      picked.templateKind === "token"
+        ? "token-hygiene.synapse"
+        : picked.templateKind === "safety"
+          ? "safety-guardrails.synapse"
+          : "response-defense.synapse";
+    const fullPath = path.join(synapseRulesDir, fileName);
+    try {
+      await fs.access(fullPath);
+    } catch {
+      await fs.writeFile(fullPath, template, "utf8");
+    }
+    const doc = await vscode.workspace.openTextDocument(vscode.Uri.file(fullPath));
+    await vscode.window.showTextDocument(doc, { preview: false });
+  }));
+
   context.subscriptions.push({
     dispose: () => {
       const ctx = cleanupContext;
@@ -859,15 +1042,7 @@ Use meaningful variable names
     },
   });
 
-  const conflictsProvider = new PlaceholderViewProvider(
-    "Conflicts",
-    "Runs conflict detection and optimization analysis (opens a terminal).",
-    "Run Conflict Detection",
-    "synapse.detect"
-  );
   const actionsProvider = new ActionsViewProvider(context.extensionUri);
-  const synergyProvider = new SynergyViewProvider(context.extensionUri);
-  const dashboardProvider = new CostDashboardProvider(context);
 
   const syncDictionaryCommand = vscode.commands.registerCommand(
     "synapse.ruleCompressor.syncDictionary",
@@ -941,11 +1116,6 @@ Use meaningful variable names
         return;
       }
 
-      synergyProvider.postCompressionTelemetry({
-        savingsPercent: result.savingsPercent,
-        beforeTokens: result.beforeTokens,
-        afterTokens: result.afterTokens,
-      });
       actionsProvider.postCompressionTelemetry({
         savingsPercent: result.savingsPercent,
         beforeTokens: result.beforeTokens,
@@ -1158,10 +1328,10 @@ Use meaningful variable names
     wsConnectCommand,
     wsDisconnectCommand,
     cleanupCommand,
-    vscode.window.registerWebviewViewProvider("synapseActionsView", actionsProvider),
-    vscode.window.registerWebviewViewProvider("synapseCostDashboard", dashboardProvider),
-    vscode.window.registerWebviewViewProvider("synapseSynergyView", synergyProvider),
-    vscode.window.registerWebviewViewProvider("synapseConflictDetectionView", conflictsProvider)
+    bestPracticesCommand,
+    forgetLicenseKeyCommand,
+    resendLicenseKeyCommand,
+    vscode.window.registerWebviewViewProvider("synapseControlCenter", actionsProvider)
   );
 
   return { isProUser };

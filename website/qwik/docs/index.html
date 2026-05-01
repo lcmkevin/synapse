@@ -115,17 +115,26 @@
             <a href="#binaries">Native Binaries</a>
             <h4>Features</h4>
             <a href="#sync">Syncing Rules</a>
+            <a href="#adapters">IDE Adapters</a>
             <a href="#token">Token Analysis</a>
             <a href="#optimize">Local Optimization</a>
-            <a href="#dashboard">Cost Dashboard</a>
+            <a href="#dashboard">Control Center</a>
             <a href="#pro">Pro License</a>
             <a href="#servers">MCP + WebSocket</a>
         </div>
         <div class="docs-content">
             <h1>Synapse Documentation</h1>
+            <p>Need the full “everything” reference (CLI + Extension + Dashboard + Infra)? See <a href="https://github.com/lcmkevin/synapse/blob/main/docs/SYNAPSE_COMPLETE_REFERENCE.md" target="_blank" rel="noreferrer">Complete Feature Reference</a>.</p>
             
             <h2 id="install">Installation</h2>
-            <pre><code>npm install -g synapse-cli</code></pre>
+            <p>Install options:</p>
+            <pre><code># Option A: install the VS Code extension (recommended for daily use)
+
+# Option B: CLI (global install, if published)
+npm install -g synapse-cli
+
+# Option C: use the repo-local CLI (this repo)
+node .\bin\synapse-unified.js --help</code></pre>
             
             <h2 id="quick-start">Quick Start</h2>
             <pre><code>synapse init
@@ -145,7 +154,7 @@ Your instructions here
 # @skill code-review</code></pre>
 
             <h2 id="vscode">VS Code Extension</h2>
-            <p>Use the extension commands for daily workflows:</p>
+            <p>Open the sidebar: <strong>Synapse → Control Center</strong>. Use the Command Palette for power-user workflows.</p>
             <pre><code>Command Palette → Synapse: Initialize Project
 Command Palette → Synapse: Import Rules from IDE
 Command Palette → Synapse: Sync Rules
@@ -153,6 +162,7 @@ Command Palette → Synapse: Analyze Tokens
 Command Palette → Synapse: Backup
 Command Palette → Synapse: Detect Conflicts
 Command Palette → Synapse: Optimize Rules (Local)</code></pre>
+            <p>Optimize/Detect runs the CLI in the background and streams logs to the <strong>Synapse</strong> Output panel (no visible terminal).</p>
 
             <h2 id="cli">CLI</h2>
             <p>Use the CLI for automation and CI:</p>
@@ -168,6 +178,7 @@ synapse backup restore --backup &lt;name&gt;      # restore a backup
 synapse diff                              # compare current rules vs latest backup
 synapse rollback --backup &lt;name&gt;            # restore rules only; run sync after
 synapse enter-license                     # save Pro key for CLI features
+synapse resend-license you@example.com    # email your key again (if enabled)
 synapse watch                             # auto-sync on changes</code></pre>
 
             <h2 id="binaries">Native Binaries</h2>
@@ -215,6 +226,10 @@ synapse adapters rollback cursor 1.1.0    # Pro</code></pre>
 
             <h2 id="token">Token Analysis</h2>
             <p>Analyze token usage and estimated cost per session to find the biggest wins quickly.</p>
+            <pre><code>synapse analyze --top 10 --threshold 2000
+
+# Optional: estimate $ per session (USD per 1M tokens)
+synapse analyze --usd-per-1m 10</code></pre>
 
             <h2 id="optimize">Local Optimization</h2>
             <p>Run a local optimizer to detect token waste, redundancy, missing constraints, and potential conflicts. Everything runs 100% locally (no bandwidth).</p>
@@ -225,8 +240,13 @@ synapse adapters rollback cursor 1.1.0    # Pro</code></pre>
             <pre><code>synapse backup list
 synapse backup restore --backup backup_2026-04-22T...</code></pre>
 
-            <h2 id="dashboard">Cost Dashboard</h2>
-            <p>Open the “Cost Dashboard” sidebar view to see totals, top rules, and recommendations.</p>
+            <h2 id="dashboard">Control Center</h2>
+            <p>Synapse exposes a single sidebar UI called <strong>Control Center</strong> to reduce clicks and keep actions + cost + improvements in one place.</p>
+            <p>Sections:</p>
+            <pre><code>- Quick Actions: Sync, Analyze, Optimize, Backup, Detect Conflicts
+- Cost Dashboard: totals, top rules, recommendations
+- Rule Improvements: Compress Workspace, Convert to Skills (Pro), Apply Best Practices
+- License: Pro status, Enter/Resend/Forget key, Diagnostics</code></pre>
 
             <h2 id="pro">Pro License</h2>
             <p>Free tier includes 5 built-in IDE adapters and manual adapter downloads. Pro unlocks:</p>
@@ -239,7 +259,15 @@ synapse backup restore --backup backup_2026-04-22T...</code></pre>
             <p>To activate Pro in the IDE:</p>
             <pre><code>Command Palette → Synapse: Upgrade to Pro
 Enter License Key</code></pre>
-            <p>Pro keys are validated by the server (HMAC signature + database status). Revoked keys stop working.</p>
+            <p>Pro keys are validated by the server (format + HMAC signature + database status). Revoked keys stop working.</p>
+            <p>License key persistence:</p>
+            <pre><code>- Extension stores the key in VS Code SecretStorage (survives reinstall better than globalState)
+- CLI stores the key in ~/.synapse/license.key
+- Use “Synapse: Forget License Key (This Machine)” to remove local activation</code></pre>
+            <p>Device policy:</p>
+            <pre><code>- The server requires an instanceId and binds a license key to one machine
+- Reinstall on the same machine continues to work (stable instanceId)
+- Using the same key on another machine is rejected</code></pre>
 
             <h3 id="pro-features">Pro Features</h3>
             <pre><code>- Unlimited IDE targets (Trae, Cursor, Windsurf, Cline, Zed, ...)

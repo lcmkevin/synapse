@@ -1,3 +1,4 @@
+const crypto = require("crypto");
 const fs = require("fs-extra");
 const https = require("https");
 const os = require("os");
@@ -7,11 +8,40 @@ const { DEFAULT_API_BASE_URL, PRO_PRICE_LABEL, PRO_TERMS_LABEL, getProCheckoutUr
 function getApiBaseUrl() {
   const env = process.env.SYNAPSE_LICENSE_API_URL;
   const base = typeof env === "string" && env.trim() ? env.trim() : DEFAULT_API_BASE_URL;
-  return base.replace(/\/+$/, "");
+  const trimmed = base.replace(/\/+$/, "");
+  if (/^https?:\/\/labs-synapse\.com$/i.test(trimmed)) return trimmed.replace(/\/\/labs-synapse\.com$/i, "//www.labs-synapse.com");
+  return trimmed;
 }
 
 function getLicenseKeyPath() {
   return path.join(os.homedir(), ".synapse", "license.key");
+}
+
+function getInstanceIdPath() {
+  return path.join(os.homedir(), ".synapse", "instance_id");
+}
+
+async function loadOrCreateInstanceId() {
+  const p = getInstanceIdPath();
+  try {
+    const text = await fs.readFile(p, "utf8");
+    const v = String(text || "").trim();
+    if (v) return v;
+  } catch {
+    void 0;
+  }
+
+  const v = `cli_${crypto.randomBytes(16).toString("hex")}`;
+  await fs.ensureDir(path.dirname(p));
+  await fs.writeFile(p, v, "utf8");
+  if (process.platform !== "win32") {
+    try {
+      await fs.chmod(p, 0o600);
+    } catch {
+      void 0;
+    }
+  }
+  return v;
 }
 
 async function loadSavedLicenseKey() {
@@ -73,7 +103,8 @@ async function isProUser() {
 
   try {
     const base = getApiBaseUrl();
-    const { status, json } = await postJson(`${base}/api/validate`, { licenseKey });
+    const instanceId = await loadOrCreateInstanceId();
+    const { status, json } = await postJson(`${base}/api/validate`, { licenseKey, instanceId });
     if (status !== 200) return false;
     return !!json && json.valid === true;
   } catch {

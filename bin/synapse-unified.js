@@ -1407,6 +1407,79 @@ program
   });
 
 program
+  .command("resend-license")
+  .description("Resend your Synapse Pro license email (always returns ok)")
+  .argument("[email]", "Your checkout email (if omitted, will prompt)")
+  .action(async (emailArg) => {
+    const readline = require("readline");
+    const https = require("https");
+    const { getApiBaseUrl } = require(path.resolve(__dirname, "..", "src", "license-check.js"));
+
+    const promptEmail = async () =>
+      new Promise((resolve) => {
+        const rl = readline.createInterface({ input: process.stdin, output: process.stdout, terminal: true });
+        rl.question("Email used at checkout: ", (answer) => {
+          rl.close();
+          resolve(answer);
+        });
+      });
+
+    const email = (typeof emailArg === "string" && emailArg.trim()) ? emailArg.trim().toLowerCase() : String(await promptEmail()).trim().toLowerCase();
+    if (!email) {
+      process.stdout.write("❌ Email is required\n");
+      process.exitCode = 1;
+      return;
+    }
+    if (process.env.SYNAPSE_OFFLINE === "true") {
+      process.stdout.write("❌ Cannot resend while SYNAPSE_OFFLINE=true\n");
+      process.exitCode = 1;
+      return;
+    }
+
+    const base = getApiBaseUrl();
+    const url = new URL(`${base}/api/resend-license`);
+    const payload = JSON.stringify({ email });
+
+    try {
+      const { status } = await new Promise((resolve, reject) => {
+        const req = https.request(
+          {
+            protocol: url.protocol,
+            hostname: url.hostname,
+            port: url.port,
+            path: url.pathname + url.search,
+            method: "POST",
+            headers: {
+              Accept: "application/json",
+              "Content-Type": "application/json",
+              "Content-Length": Buffer.byteLength(payload),
+            },
+          },
+          (res) => {
+            res.on("data", () => void 0);
+            res.on("end", () => resolve({ status: res.statusCode || 0 }));
+          }
+        );
+        req.on("error", reject);
+        req.write(payload);
+        req.end();
+      });
+
+      if (status >= 200 && status < 300) {
+        process.stdout.write("✅ If a license exists for that email, it has been resent.\n");
+        return;
+      }
+
+      process.stdout.write(`❌ Resend failed (${status}). Check: ${base}/api/resend-license\n`);
+      process.exitCode = 1;
+    } catch {
+      process.stdout.write("❌ Resend failed (network error)\n");
+      process.stdout.write(`Check: ${base}/api/resend-license\n`);
+      process.exitCode = 1;
+    }
+  });
+
+program
   .command("watch")
   .description("Watch .synapse/ and auto-sync on changes")
   .option("-t, --targets <ides>", "Comma-separated IDEs to sync to", "trae,cursor")

@@ -1,3 +1,4 @@
+import crypto from "crypto";
 import fs from "fs/promises";
 import https from "https";
 import os from "os";
@@ -13,11 +14,40 @@ export type CurrentLicense = {
 function getApiBaseUrl(): string {
   const env = process.env.SYNAPSE_LICENSE_API_URL;
   const base = typeof env === "string" && env.trim() ? env.trim() : "https://www.labs-synapse.com";
-  return base.replace(/\/+$/, "");
+  const trimmed = base.replace(/\/+$/, "");
+  if (/^https?:\/\/labs-synapse\.com$/i.test(trimmed)) return trimmed.replace(/\/\/labs-synapse\.com$/i, "//www.labs-synapse.com");
+  return trimmed;
 }
 
 function getLicenseKeyPath(): string {
   return path.join(os.homedir(), ".synapse", "license.key");
+}
+
+function getInstanceIdPath(): string {
+  return path.join(os.homedir(), ".synapse", "instance_id");
+}
+
+async function loadOrCreateInstanceId(): Promise<string> {
+  const p = getInstanceIdPath();
+  try {
+    const text = await fs.readFile(p, "utf8");
+    const v = String(text || "").trim();
+    if (v) return v;
+  } catch {
+    void 0;
+  }
+
+  const v = `cli_${crypto.randomBytes(16).toString("hex")}`;
+  await fs.mkdir(path.dirname(p), { recursive: true });
+  await fs.writeFile(p, v, "utf8");
+  if (process.platform !== "win32") {
+    try {
+      await fs.chmod(p, 0o600);
+    } catch {
+      void 0;
+    }
+  }
+  return v;
 }
 
 async function loadSavedLicenseKey(): Promise<string> {
@@ -79,7 +109,8 @@ export async function getCurrentLicense(): Promise<CurrentLicense> {
 
   try {
     const base = getApiBaseUrl();
-    const { status, json } = await postJson(`${base}/api/validate`, { licenseKey });
+    const instanceId = await loadOrCreateInstanceId();
+    const { status, json } = await postJson(`${base}/api/validate`, { licenseKey, instanceId });
     if (status !== 200) return { valid: false, plan: "free" };
     const valid = !!json && json.valid === true;
     const plan = valid && json && (json.plan === "pro" || json.plan === "enterprise") ? json.plan : "free";

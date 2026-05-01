@@ -52,10 +52,7 @@
     "theme": "dark"
   },
   "activationEvents": [
-    "onView:synapseActionsView",
-    "onView:synapseCostDashboard",
-    "onView:synapseSynergyView",
-    "onView:synapseConflictDetectionView",
+    "onView:synapseControlCenter",
     "onCommand:synapse.sync",
     "onCommand:synapse.init",
     "onCommand:synapse.analyze",
@@ -64,6 +61,8 @@
     "onCommand:synapse.convertToSkill",
     "onCommand:synapse.upgradePro",
     "onCommand:synapse.enterLicenseKey",
+    "onCommand:synapse.resendLicenseKey",
+    "onCommand:synapse.forgetLicenseKey",
     "onCommand:synapse.licenseDiagnostics",
     "onCommand:synapse.target.add",
     "onCommand:synapse.ws.connect",
@@ -75,6 +74,7 @@
     "onCommand:synapse.ruleCompressor.scanWorkspace",
     "onCommand:synapse.ruleCompressor.compressWorkspace",
     "onCommand:synapse.ruleCompressor.syncDictionary",
+    "onCommand:synapse.bestPractices",
     "onCommand:synapse.cleanup"
   ],
   "main": "./out/extension.js",
@@ -123,6 +123,16 @@
       {
         "command": "synapse.enterLicenseKey",
         "title": "Synapse: Enter License Key",
+        "category": "Synapse"
+      },
+      {
+        "command": "synapse.resendLicenseKey",
+        "title": "Synapse: Resend License Key",
+        "category": "Synapse"
+      },
+      {
+        "command": "synapse.forgetLicenseKey",
+        "title": "Synapse: Forget License Key (This Machine)",
         "category": "Synapse"
       },
       {
@@ -176,6 +186,11 @@
         "category": "Synapse"
       },
       {
+        "command": "synapse.bestPractices",
+        "title": "Synapse: Apply Best Practices",
+        "category": "Synapse"
+      },
+      {
         "command": "synapse.cleanup",
         "title": "Synapse: Cleanup / Uninstall",
         "category": "Synapse"
@@ -193,23 +208,8 @@
     "views": {
       "synapse-sidebar": [
         {
-          "id": "synapseActionsView",
-          "name": "Actions",
-          "type": "webview"
-        },
-        {
-          "id": "synapseCostDashboard",
-          "name": "Cost Dashboard",
-          "type": "webview"
-        },
-        {
-          "id": "synapseSynergyView",
-          "name": "Synergy",
-          "type": "webview"
-        },
-        {
-          "id": "synapseConflictDetectionView",
-          "name": "Conflicts",
+          "id": "synapseControlCenter",
+          "name": "Control Center",
           "type": "webview"
         }
       ]
@@ -296,6 +296,7 @@
   "dependencies": {
     "express": "^4.18.0",
     "fs-extra": "^11.0.0",
+    "synapse-cli": "file:..",
     "tiktoken": "^1.0.22",
     "ws": "^8.14.0"
   }

@@ -49,6 +49,7 @@
             <li>✅ Advanced Logic Symbolization: Shrink heavy logic into high-density tokens like [IF file==JS].</li>
             <li>✅ VS Code Edge AI Fallback: If standard rules fail to shrink, we utilize local vscode.lm for lossless semantic pruning—100% free with 0 API cost.</li>
             <li>✅ Token Budget Guardrail: Stops you from sending huge prompts by warning you if rules exceed your custom token threshold.</li>
+            <li>✅ License UX: Resend key + secure local activation (survives reinstall better than globalState).</li>
           </ul>
           <button class="btn btn-primary" id="proCheckoutBtn">Checkout → Get Pro key</button>
         </div>
@@ -152,8 +153,8 @@
             body: JSON.stringify({
               plan: "pro_lifetime",
               customerEmail: email,
-              success_url: "https://labs-synapse.com/pro/success/",
-              cancel_url: "https://labs-synapse.com/pro/checkout/",
+              success_url: "https://www.labs-synapse.com/pro/success/",
+              cancel_url: "https://www.labs-synapse.com/pro/checkout/",
             }),
           });
           const text = await resp.text();

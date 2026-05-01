@@ -1,12 +1,16 @@
 import * as vscode from "vscode";
 import * as fs from "fs/promises";
 import * as path from "path";
+import { TokenCounter } from "./tokenAnalysis/tokenCounter";
 
 export class ActionsViewProvider implements vscode.WebviewViewProvider {
   private view?: vscode.WebviewView;
   private lastTelemetry?: { savingsPercent: number; beforeTokens: number; afterTokens: number };
+  private tokenCounter: TokenCounter;
 
-  constructor(private readonly extensionUri: vscode.Uri) {}
+  constructor(private readonly extensionUri: vscode.Uri) {
+    this.tokenCounter = new TokenCounter();
+  }
 
   postCompressionTelemetry(payload: { savingsPercent: number; beforeTokens: number; afterTokens: number }) {
     this.lastTelemetry = payload;
@@ -55,6 +59,9 @@ export class ActionsViewProvider implements vscode.WebviewViewProvider {
         case "optimize":
           await vscode.commands.executeCommand("synapse.optimize");
           break;
+        case "backup":
+          await vscode.commands.executeCommand("synapse.backup");
+          break;
         case "scanCompression":
           await vscode.commands.executeCommand("synapse.ruleCompressor.scanWorkspace");
           break;
@@ -63,6 +70,33 @@ export class ActionsViewProvider implements vscode.WebviewViewProvider {
           break;
         case "compressSelection":
           await vscode.commands.executeCommand("synapse.compressSelection");
+          break;
+        case "convertToSkills":
+          await vscode.commands.executeCommand("synapse.convertToSkill");
+          break;
+        case "applyBestPractices":
+          await vscode.commands.executeCommand("synapse.bestPractices");
+          break;
+        case "syncDictionary":
+          await vscode.commands.executeCommand("synapse.ruleCompressor.syncDictionary");
+          break;
+        case "upgradePro":
+          await vscode.commands.executeCommand("synapse.upgradePro");
+          break;
+        case "enterLicenseKey":
+          await vscode.commands.executeCommand("synapse.enterLicenseKey");
+          break;
+        case "resendLicenseKey":
+          await vscode.commands.executeCommand("synapse.resendLicenseKey");
+          break;
+        case "forgetLicenseKey":
+          await vscode.commands.executeCommand("synapse.forgetLicenseKey");
+          break;
+        case "licenseDiagnostics":
+          await vscode.commands.executeCommand("synapse.licenseDiagnostics");
+          break;
+        case "refresh":
+          await this.sendAll();
           break;
         case "openRule":
           if (typeof message?.path === "string" && message.path.trim()) {
@@ -73,15 +107,21 @@ export class ActionsViewProvider implements vscode.WebviewViewProvider {
             await vscode.window.showTextDocument(doc, { preview: false });
           }
           break;
-        case "getRules":
-          await this.sendRules();
+        case "ready":
+          await this.sendAll();
           break;
         default:
           break;
       }
     });
 
-    void this.sendRules();
+    void this.sendAll();
+  }
+
+  private async sendAll() {
+    await this.sendRules();
+    await this.sendCostSummary();
+    await this.sendBestPracticesStatus();
   }
 
   private async sendRules() {
@@ -104,85 +144,213 @@ export class ActionsViewProvider implements vscode.WebviewViewProvider {
     }
   }
 
+  private async sendCostSummary() {
+    const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+    if (!workspaceRoot) return;
+
+    const rulesPath = path.join(workspaceRoot, ".synapse", "rules");
+    try {
+      const files = await fs.readdir(rulesPath);
+      const rules = await Promise.all(
+        files.filter((f) => f.endsWith(".synapse")).map(async (file) => ({
+          name: file,
+          content: await fs.readFile(path.join(rulesPath, file), "utf-8"),
+        }))
+      );
+
+      const analysis = this.tokenCounter.analyzeRules(rules, "gpt-4o");
+      const ext =
+        vscode.extensions.getExtension("labs-synapse.synapse") || vscode.extensions.getExtension("lcmkevin.synapse");
+      const exported = ext && ext.isActive ? (ext.exports as any) : undefined;
+      const isPro =
+        typeof exported?.isProUser === "function"
+          ? !!exported.isProUser()
+          : typeof exported?.isProUser === "boolean"
+            ? exported.isProUser
+            : false;
+
+      const topRules = [...analysis.breakdown].sort((a, b) => b.tokens - a.tokens).slice(0, 3);
+      void this.view?.webview.postMessage({
+        command: "updateCost",
+        data: {
+          totalTokens: analysis.totalTokens,
+          totalCost: analysis.totalCost,
+          ruleCount: rules.length,
+          topRules,
+          recommendations: analysis.recommendations,
+          isPro,
+        },
+      });
+    } catch {
+      void 0;
+    }
+  }
+
+  private async sendBestPracticesStatus() {
+    const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+    if (!workspaceRoot) return;
+
+    const synapseRulesDir = path.join(workspaceRoot, ".synapse", "rules");
+    const traeRulesDir = path.join(workspaceRoot, ".trae", "rules");
+
+    const readAllRuleText = async (dirPath: string): Promise<string> => {
+      const entries = await fs.readdir(dirPath).catch(() => []);
+      const texts: string[] = [];
+      for (const f of entries) {
+        const lc = f.toLowerCase();
+        if (!(lc.endsWith(".synapse") || lc.endsWith(".md") || lc.endsWith(".mdc") || lc.endsWith(".rules") || lc.endsWith(".txt"))) continue;
+        const content = await fs.readFile(path.join(dirPath, f), "utf8").catch(() => "");
+        if (content.trim()) texts.push(content);
+      }
+      return texts.join("\n\n").toLowerCase();
+    };
+
+    const allTextLower = [await readAllRuleText(synapseRulesDir), await readAllRuleText(traeRulesDir)].join("\n\n");
+    const missingTokenHygiene =
+      !(allTextLower.includes("token") && (allTextLower.includes("concise") || allTextLower.includes("cost") || allTextLower.includes("short")));
+    const missingSafety =
+      !(
+        (allTextLower.includes("delete") || allTextLower.includes("drop") || allTextLower.includes("truncate")) &&
+        (allTextLower.includes("confirm") || allTextLower.includes("backup") || allTextLower.includes("migration"))
+      );
+    const missingDefense =
+      !(
+        allTextLower.includes("do not output pseudo-code") ||
+        allTextLower.includes("do not output pseudocode") ||
+        allTextLower.includes("short-hand grammar") ||
+        allTextLower.includes("valid standard code only")
+      );
+
+    void this.view?.webview.postMessage({
+      command: "updateBestPractices",
+      data: { missingTokenHygiene, missingSafety, missingDefense },
+    });
+  }
+
   private getHtml(): string {
     return `<!DOCTYPE html>
     <html>
     <head>
+      <meta charset="utf-8" />
       <style>
-        body { padding: 10px; font-family: var(--vscode-font-family); }
-        .rule-item {
-          padding: 8px;
-          margin: 4px 0;
-          background: var(--vscode-list-inactiveSelectionBackground);
-          border-radius: 4px;
+        body { padding: 10px; font-family: var(--vscode-font-family); color: var(--vscode-foreground); }
+        h3 { margin: 0 0 10px 0; }
+        .section { border: 1px solid var(--vscode-panel-border); border-radius: 8px; overflow: hidden; margin: 10px 0; }
+        .section-header {
+          padding: 8px 10px;
+          background: var(--vscode-sideBarSectionHeader-background);
+          color: var(--vscode-sideBarSectionHeader-foreground);
+          font-weight: 600;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
           cursor: pointer;
+          user-select: none;
         }
-        .rule-item:hover { background: var(--vscode-list-activeSelectionBackground); }
+        .section-content { padding: 10px; }
+        .collapsed { display: none; }
+        .row { display: flex; gap: 8px; flex-wrap: wrap; }
         button {
           background: var(--vscode-button-background);
           color: var(--vscode-button-foreground);
           border: none;
-          padding: 6px 12px;
-          border-radius: 4px;
+          padding: 6px 10px;
+          border-radius: 6px;
           cursor: pointer;
-          width: 100%;
-          margin: 4px 0;
         }
         button:hover { background: var(--vscode-button-hoverBackground); }
-        .sync-status {
-          padding: 8px;
-          margin: 8px 0;
-          background: var(--vscode-statusBarItem-warningBackground);
-          border-radius: 4px;
-          font-size: 12px;
-        }
+        button.secondary { background: transparent; color: var(--vscode-textLink-foreground); border: 1px solid var(--vscode-panel-border); }
+        button.secondary:hover { background: var(--vscode-list-hoverBackground); }
+        .metric { padding: 8px; border-radius: 6px; background: var(--vscode-editor-background); border: 1px solid var(--vscode-panel-border); }
+        .muted { color: var(--vscode-descriptionForeground); }
+        .badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; border: 1px solid var(--vscode-panel-border); }
+        .rule-item { padding: 6px 8px; border-radius: 6px; cursor: pointer; }
+        .rule-item:hover { background: var(--vscode-list-hoverBackground); }
+        .footer { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--vscode-panel-border); }
+        ul { margin: 6px 0 0 18px; }
       </style>
     </head>
     <body>
-      <h3>Synapse Actions</h3>
-      <button id="syncBtn">🔄 Sync All Rules</button>
-      <button id="analyzeBtn">📊 Analyze Tokens</button>
-      <button id="detectBtn">⚠️ Detect Conflicts</button>
-      <button id="optimizeBtn">🛠 Optimize Rules</button>
-      <button id="scanBtn">🧠 Scan Compression</button>
-      <button id="compressBtn">🗜 Compress Workspace</button>
-      <button id="compressSelBtn">🗜 Compress Current File</button>
-      <div id="syncStatus" class="sync-status">Ready</div>
-      <div id="compressionStatus" class="sync-status">Tokens Saved: —</div>
-      <h4>Rules</h4>
-      <div id="rulesList">Loading...</div>
+      <h3>Synapse Control Center</h3>
+
+      <div class="section">
+        <div class="section-header"><span>Quick Actions</span><span class="muted">Always visible</span></div>
+        <div class="section-content">
+          <div class="row">
+            <button onclick="exec('sync')">Sync</button>
+            <button onclick="exec('analyze')">Analyze</button>
+            <button onclick="exec('optimize')">Optimize</button>
+            <button onclick="exec('backup')">Backup</button>
+            <button class="secondary" onclick="exec('detect')">Detect Conflicts</button>
+            <button class="secondary" onclick="exec('refresh')">Refresh</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-header" onclick="toggle('costBody', 'costCaret')"><span>Cost Dashboard</span><span id="costCaret">▼</span></div>
+        <div id="costBody" class="section-content">
+          <div id="costSummary" class="metric">Loading…</div>
+          <div id="costDetails" class="muted" style="margin-top:8px"></div>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-header" onclick="toggle('improveBody', 'improveCaret')"><span>Rule Improvements</span><span id="improveCaret">▼</span></div>
+        <div id="improveBody" class="section-content">
+          <div class="row">
+            <button onclick="exec('compressWorkspace')">Compress Workspace</button>
+            <button onclick="exec('compressSelection')">Compress Current File</button>
+            <button onclick="exec('convertToSkills')">Convert to Skills</button>
+            <button onclick="exec('applyBestPractices')">Apply Best Practices</button>
+            <button class="secondary" onclick="exec('scanCompression')">Scan Compression</button>
+            <button class="secondary" onclick="exec('syncDictionary')">Sync Dictionary</button>
+          </div>
+          <div id="bestPracticesStatus" class="muted" style="margin-top:10px"></div>
+          <div id="compressionStatus" class="muted" style="margin-top:6px"></div>
+        </div>
+      </div>
+
+      <div class="footer">
+        <div class="row" style="align-items:center; justify-content: space-between;">
+          <div>
+            <span class="badge" id="licenseBadge">License: —</span>
+          </div>
+          <div class="row">
+            <button class="secondary" onclick="exec('upgradePro')">Upgrade</button>
+            <button class="secondary" onclick="exec('enterLicenseKey')">Enter Key</button>
+            <button class="secondary" onclick="exec('resendLicenseKey')">Resend</button>
+            <button class="secondary" onclick="exec('licenseDiagnostics')">Diagnostics</button>
+            <button class="secondary" onclick="exec('forgetLicenseKey')">Forget</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-header" onclick="toggle('rulesBody', 'rulesCaret')"><span>Rules</span><span id="rulesCaret">▼</span></div>
+        <div id="rulesBody" class="section-content">
+          <div id="rulesList" class="muted">Loading…</div>
+        </div>
+      </div>
 
       <script>
         const vscode = acquireVsCodeApi();
 
-        document.getElementById('syncBtn').onclick = () => {
-          vscode.postMessage({ command: 'sync' });
-          document.getElementById('syncStatus').innerHTML = '🔄 Syncing...';
-        };
+        function exec(command) { vscode.postMessage({ command }); }
 
-        document.getElementById('analyzeBtn').onclick = () => {
-          vscode.postMessage({ command: 'analyze' });
-        };
-
-        document.getElementById('detectBtn').onclick = () => {
-          vscode.postMessage({ command: 'detect' });
-        };
-
-        document.getElementById('optimizeBtn').onclick = () => {
-          vscode.postMessage({ command: 'optimize' });
-        };
-
-        document.getElementById('scanBtn').onclick = () => {
-          vscode.postMessage({ command: 'scanCompression' });
-        };
-
-        document.getElementById('compressBtn').onclick = () => {
-          vscode.postMessage({ command: 'compressWorkspace' });
-        };
-
-        document.getElementById('compressSelBtn').onclick = () => {
-          vscode.postMessage({ command: 'compressSelection' });
-        };
+        function toggle(bodyId, caretId) {
+          const body = document.getElementById(bodyId);
+          const caret = document.getElementById(caretId);
+          if (!body || !caret) return;
+          const isCollapsed = body.classList.contains('collapsed');
+          if (isCollapsed) {
+            body.classList.remove('collapsed');
+            caret.textContent = '▼';
+          } else {
+            body.classList.add('collapsed');
+            caret.textContent = '▶';
+          }
+        }
 
         window.addEventListener('message', event => {
           const message = event.data;
@@ -192,17 +360,16 @@ export class ActionsViewProvider implements vscode.WebviewViewProvider {
             const before = typeof data.beforeTokens === 'number' ? data.beforeTokens : null;
             const after = typeof data.afterTokens === 'number' ? data.afterTokens : null;
             const text = saved === null ? 'Tokens Saved: —' : ('Tokens Saved: ' + saved.toFixed(1) + '% (' + before + ' → ' + after + ')');
-            document.getElementById('compressionStatus').textContent = text;
+            const el = document.getElementById('compressionStatus');
+            if (el) el.textContent = text;
             return;
           }
           if (message.command === 'updateRules') {
             const rulesList = document.getElementById('rulesList');
             if (!message.rules || message.rules.length === 0) {
-              rulesList.innerHTML = '<p>No rules yet. Run "Synapse: Initialize Project"</p>';
+              rulesList.innerHTML = '<div>No rules yet. Run "Synapse: Initialize Project"</div>';
             } else {
-              rulesList.innerHTML = message.rules.map(r =>
-                '<div class="rule-item" data-path="' + r.path + '">📄 ' + r.name + '</div>'
-              ).join('');
+              rulesList.innerHTML = message.rules.map(r => '<div class="rule-item" data-path="' + r.path + '">📄 ' + r.name + '</div>').join('');
               Array.from(document.querySelectorAll('.rule-item')).forEach(el => {
                 el.addEventListener('click', () => {
                   const p = el.getAttribute('data-path') || '';
@@ -210,10 +377,49 @@ export class ActionsViewProvider implements vscode.WebviewViewProvider {
                 });
               });
             }
+            return;
+          }
+          if (message.command === 'updateCost') {
+            const d = message.data || {};
+            const isPro = !!d.isPro;
+            const badge = document.getElementById('licenseBadge');
+            if (badge) badge.textContent = 'License: ' + (isPro ? 'Pro active' : 'Free');
+
+            const totalTokens = typeof d.totalTokens === 'number' ? d.totalTokens : 0;
+            const totalCost = typeof d.totalCost === 'number' ? d.totalCost : 0;
+            const ruleCount = typeof d.ruleCount === 'number' ? d.ruleCount : 0;
+            const top = Array.isArray(d.topRules) ? d.topRules : [];
+            const recs = Array.isArray(d.recommendations) ? d.recommendations : [];
+
+            const summary = document.getElementById('costSummary');
+            const details = document.getElementById('costDetails');
+            if (summary) summary.innerHTML =
+              '<div><strong>Total:</strong> ' + totalTokens.toLocaleString() + ' tokens · ~$' + totalCost.toFixed(4) + '/session</div>' +
+              '<div class="muted" style="margin-top:4px">' + ruleCount + ' rule(s) scanned</div>';
+            if (details) {
+              const topHtml = top.length
+                ? ('<div style="margin-top:8px"><strong>Top rules</strong><ul>' + top.map(r => '<li>' + r.ruleName + ' — ' + r.tokens.toLocaleString() + ' tokens</li>').join('') + '</ul></div>')
+                : '';
+              const recHtml = recs.length
+                ? ('<div style="margin-top:8px"><strong>Recommendations</strong><ul>' + recs.map(r => '<li>' + r + '</li>').join('') + '</ul></div>')
+                : '<div style="margin-top:8px">No recommendations.</div>';
+              details.innerHTML = topHtml + recHtml;
+            }
+            return;
+          }
+          if (message.command === 'updateBestPractices') {
+            const d = message.data || {};
+            const missing = [];
+            if (d.missingTokenHygiene) missing.push('Token hygiene');
+            if (d.missingSafety) missing.push('Safety guardrails');
+            if (d.missingDefense) missing.push('Response defense');
+            const el = document.getElementById('bestPracticesStatus');
+            if (el) el.textContent = missing.length ? ('Missing: ' + missing.join(', ')) : 'Best practices: OK';
+            return;
           }
         });
 
-        vscode.postMessage({ command: 'getRules' });
+        vscode.postMessage({ command: 'ready' });
       </script>
     </body>
     </html>`;

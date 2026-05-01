@@ -124,7 +124,7 @@ async function fetchLicenseFromDb(licenseKey) {
   const cfg = getSupabaseConfig();
   if (!cfg) return { ok: false, error: "Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY" };
 
-  const select = encodeURIComponent("license_key,status,plan,expires_at");
+  const select = encodeURIComponent("license_key,status,plan,expires_at,last_instance_id");
   const filterKey = encodeURIComponent(licenseKey);
   const url = `${cfg.url}/rest/v1/licenses?license_key=eq.${filterKey}&select=${select}&limit=1`;
   const { status, json } = await requestJson("GET", url, {
@@ -138,25 +138,45 @@ async function fetchLicenseFromDb(licenseKey) {
   return { ok: true, record: json[0] };
 }
 
-async function touchLicense(licenseKey, instanceId) {
+async function touchOrBindLicense(licenseKey, instanceId) {
   const cfg = getSupabaseConfig();
-  if (!cfg) return;
+  if (!cfg) return { updated: false };
   const filterKey = encodeURIComponent(licenseKey);
-  const url = `${cfg.url}/rest/v1/licenses?license_key=eq.${filterKey}`;
-  const update = {
-    last_used_at: new Date().toISOString(),
-    last_instance_id: typeof instanceId === "string" && instanceId.length <= 200 ? instanceId : null,
-  };
-  await requestJson(
+  const id = typeof instanceId === "string" ? instanceId.trim() : "";
+  const lastUsedAt = new Date().toISOString();
+
+  if (!id) {
+    const url = `${cfg.url}/rest/v1/licenses?license_key=eq.${filterKey}`;
+    await requestJson(
+      "PATCH",
+      url,
+      {
+        apikey: cfg.key,
+        Authorization: `Bearer ${cfg.key}`,
+        Prefer: "return=minimal",
+      },
+      { last_used_at: lastUsedAt }
+    );
+    return { updated: true };
+  }
+
+  const safeId = id.length <= 200 ? id : id.slice(0, 200);
+  const or = encodeURIComponent(`(last_instance_id.is.null,last_instance_id.eq.${safeId})`);
+  const url = `${cfg.url}/rest/v1/licenses?license_key=eq.${filterKey}&or=${or}`;
+  const { status, json } = await requestJson(
     "PATCH",
     url,
     {
       apikey: cfg.key,
       Authorization: `Bearer ${cfg.key}`,
-      Prefer: "return=minimal",
+      Prefer: "return=representation",
     },
-    update
+    { last_used_at: lastUsedAt, last_instance_id: safeId }
   );
+
+  if (status < 200 || status >= 300) return { updated: false };
+  if (Array.isArray(json)) return { updated: json.length > 0 };
+  return { updated: true };
 }
 
 async function validateLicense(req, res) {
@@ -204,11 +224,21 @@ async function validateLicense(req, res) {
     }
   }
 
-  const instanceId = req?.body?.instanceId;
+  const instanceId = typeof req?.body?.instanceId === "string" ? req.body.instanceId.trim() : "";
+  if (!instanceId) {
+    return res.status(200).json({ valid: false, reason: "Client update required (missing instance id)" });
+  }
+  if (record.last_instance_id && record.last_instance_id !== instanceId) {
+    return res.status(200).json({ valid: false, reason: "License already activated on another machine" });
+  }
+
   try {
-    await touchLicense(licenseKey, instanceId);
+    const { updated } = await touchOrBindLicense(licenseKey, instanceId);
+    if (!updated) {
+      return res.status(200).json({ valid: false, reason: "License already activated on another machine" });
+    }
   } catch {
-    void 0;
+    return res.status(500).json({ valid: false, reason: "DB update failed" });
   }
 
   return res.status(200).json({ valid: true, plan: record.plan || "pro", expiresAt: record.expires_at || null });

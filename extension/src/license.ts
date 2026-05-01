@@ -1,6 +1,9 @@
 import * as vscode from "vscode";
 import * as http from "http";
 import * as https from "https";
+import * as fs from "fs/promises";
+import * as os from "os";
+import * as path from "path";
 import {
   DEFAULT_API_BASE_URL,
   PRO_CHECKOUT_CANCEL_URL,
@@ -15,6 +18,10 @@ export class LicenseManager {
   private context: vscode.ExtensionContext | null = null;
   private isPro: boolean = false;
   private ready: Promise<void> | null = null;
+
+  private getSecretKeyName(): string {
+    return "synapse.licenseKey.v1";
+  }
 
   static getInstance(): LicenseManager {
     if (!LicenseManager.instance) {
@@ -109,9 +116,81 @@ export class LicenseManager {
     }
   }
 
+  private getCliLicenseKeyPath(): string {
+    return path.join(os.homedir(), ".synapse", "license.key");
+  }
+
+  private async loadCliLicenseKey(): Promise<string> {
+    const p = this.getCliLicenseKeyPath();
+    try {
+      const text = await fs.readFile(p, "utf8");
+      return String(text || "").trim();
+    } catch {
+      return "";
+    }
+  }
+
+  private async saveCliLicenseKey(key: string): Promise<void> {
+    const p = this.getCliLicenseKeyPath();
+    await fs.mkdir(path.dirname(p), { recursive: true });
+    await fs.writeFile(p, String(key || "").trim(), "utf8");
+    if (process.platform !== "win32") {
+      try {
+        await fs.chmod(p, 0o600);
+      } catch {
+        void 0;
+      }
+    }
+  }
+
+  private async deleteCliLicenseKey(): Promise<void> {
+    const p = this.getCliLicenseKeyPath();
+    try {
+      await fs.unlink(p);
+    } catch {
+      void 0;
+    }
+  }
+
+  private async loadSecretLicenseKey(): Promise<string> {
+    if (!this.context?.secrets) return "";
+    try {
+      const v = await this.context.secrets.get(this.getSecretKeyName());
+      return typeof v === "string" ? v.trim() : "";
+    } catch {
+      return "";
+    }
+  }
+
+  private async saveSecretLicenseKey(key: string): Promise<void> {
+    if (!this.context?.secrets) return;
+    const v = typeof key === "string" ? key.trim() : "";
+    if (!v) return;
+    try {
+      await this.context.secrets.store(this.getSecretKeyName(), v);
+    } catch {
+      void 0;
+    }
+  }
+
+  private async deleteSecretLicenseKey(): Promise<void> {
+    if (!this.context?.secrets) return;
+    try {
+      await this.context.secrets.delete(this.getSecretKeyName());
+    } catch {
+      void 0;
+    }
+  }
+
   private async loadSavedLicense(): Promise<void> {
     if (!this.context) return;
-    const savedKey = this.context.globalState.get<string>("licenseKey");
+    const fromSecret = await this.loadSecretLicenseKey();
+    const fromState = this.context.globalState.get<string>("licenseKey");
+    const fromCli = await this.loadCliLicenseKey();
+    const savedKey =
+      fromSecret ||
+      ((typeof fromState === "string" && fromState.trim()) ? fromState.trim() : "") ||
+      (fromCli || "");
     if (!savedKey) {
       this.isPro = false;
       return;
@@ -119,6 +198,11 @@ export class LicenseManager {
 
     const result = await this.validateWithServer(savedKey);
     this.isPro = result.valid;
+    if (result.valid) {
+      await this.saveSecretLicenseKey(savedKey);
+      await this.context.globalState.update("licenseKey", savedKey);
+      await this.saveCliLicenseKey(savedKey);
+    }
   }
 
   private redactKey(key: string): string {
@@ -186,7 +270,8 @@ export class LicenseManager {
     const instanceId = vscode.env.machineId || "unknown";
     const channel = vscode.window.createOutputChannel("Synapse License");
 
-    const savedKey = this.context?.globalState.get<string>("licenseKey");
+    const fromSecret = await this.loadSecretLicenseKey();
+    const savedKey = fromSecret || this.context?.globalState.get<string>("licenseKey");
     const key =
       typeof savedKey === "string" && savedKey.trim()
         ? savedKey.trim()
@@ -232,14 +317,24 @@ export class LicenseManager {
     const result = await this.validateWithServer(trimmed);
     if (!result.valid) {
       this.isPro = false;
-      await this.context.globalState.update("licenseKey", undefined);
       vscode.window.showErrorMessage(result.reason ? `License invalid: ${result.reason}` : "License invalid");
       return false;
     }
 
     this.isPro = true;
+    await this.saveSecretLicenseKey(trimmed);
     await this.context.globalState.update("licenseKey", trimmed);
+    await this.saveCliLicenseKey(trimmed);
     vscode.window.showInformationMessage("Synapse Pro activated.");
     return true;
+  }
+
+  async forgetLicenseKey(): Promise<void> {
+    if (!this.context) return;
+    this.isPro = false;
+    await this.deleteSecretLicenseKey();
+    await this.context.globalState.update("licenseKey", undefined);
+    await this.context.globalState.update("synapse.ruleCompressor.dictionary.v1", undefined);
+    await this.deleteCliLicenseKey();
   }
 }
