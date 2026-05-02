@@ -38,13 +38,31 @@ function verifyStripeSignature(rawBody, signatureHeader, secret, toleranceSecond
   return match ? { ok: true } : { ok: false, reason: "Invalid Stripe-Signature" };
 }
 
-function readRawBody(req) {
+function readRawBody(req, maxBytes = 1024 * 1024) {
   return new Promise((resolve, reject) => {
     if (Buffer.isBuffer(req.body)) return resolve(req.body);
     if (typeof req.body === "string") return resolve(Buffer.from(req.body, "utf8"));
 
     const chunks = [];
-    req.on("data", (chunk) => chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)));
+    let total = 0;
+    let done = false;
+    req.on("data", (chunk) => {
+      if (done) return;
+      const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+      total += buf.length;
+      if (total > maxBytes) {
+        done = true;
+        try {
+          req.destroy();
+        } catch {
+          void 0;
+        }
+        const err = new Error("Payload too large");
+        err.statusCode = 413;
+        return reject(err);
+      }
+      chunks.push(buf);
+    });
     req.on("end", () => resolve(Buffer.concat(chunks)));
     req.on("error", reject);
   });

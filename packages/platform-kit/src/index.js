@@ -1,5 +1,5 @@
 const { readJsonBody, extractBearerOrBodyKey, requestJson } = require("./http.js");
-const { getLicenseSecretFromEnv, generateLicenseKey, parseLicenseKey, safeEqualHex16, hmacSignatureHex16 } = require("./license.js");
+const { getLicenseSecretFromEnv, generateLicenseKey, parseLicenseKey, safeEqualHex16, safeEqualHex, hmacSignatureHex16, hmacSignatureHex32V2 } = require("./license.js");
 const { getSupabaseServiceConfigFromEnv, fetchLicenseRecordByKey, touchLicenseUsage, upsertLicenseRecord } = require("./supabase-licenses.js");
 const { verifyStripeSignature, readRawBody } = require("./stripe.js");
 
@@ -12,7 +12,9 @@ module.exports = {
   generateLicenseKey,
   parseLicenseKey,
   safeEqualHex16,
+  safeEqualHex,
   hmacSignatureHex16,
+  hmacSignatureHex32V2,
 
   getSupabaseServiceConfigFromEnv,
   fetchLicenseRecordByKey,
