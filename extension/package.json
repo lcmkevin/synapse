@@ -296,7 +296,6 @@
   "dependencies": {
     "express": "^4.18.0",
     "fs-extra": "^11.0.0",
-    "synapse-cli": "file:..",
     "tiktoken": "^1.0.22",
     "ws": "^8.14.0"
   }
