@@ -30,7 +30,7 @@
 
     <section class="section" style="padding-top:140px">
         <h2 class="section-title">Security</h2>
-        <p class="section-subtitle">Last updated: 2026-04-19</p>
+        <p class="section-subtitle">Last updated: 2026-05-02</p>
 
         <div class="pricing-grid" style="grid-template-columns: 1fr; max-width: 920px; margin: 2rem auto 0;">
             <div class="pricing-card" style="transform:none">
@@ -55,6 +55,14 @@
                     <li>Do not store credentials in `.synapse/` rules.</li>
                     <li>Keep secrets in environment variables or a secret manager.</li>
                     <li>Review generated outputs before committing to your repo.</li>
+                </ul>
+
+                <h3 style="margin-top: 1.5rem;">License Key Safety</h3>
+                <ul class="pricing-features">
+                    <li>The VS Code extension stores your license key using VS Code SecretStorage.</li>
+                    <li>Checkout key retrieval uses a per-checkout access token passed in the URL fragment (not sent as a referrer).</li>
+                    <li>License validation is server-side and enforces “1 key = 1 machine” using an instance id.</li>
+                    <li>We avoid logging full license keys or secrets in server logs.</li>
                 </ul>
 
                 <h3 style="margin-top: 1.5rem;">Contact</h3>
