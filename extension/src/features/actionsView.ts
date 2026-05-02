@@ -301,10 +301,10 @@ export class ActionsViewProvider implements vscode.WebviewViewProvider {
           <div class="row">
             <button onclick="exec('compressWorkspace')">Compress Workspace</button>
             <button onclick="exec('compressSelection')">Compress Current File</button>
-            <button onclick="exec('convertToSkills')">Convert to Skills</button>
+            <button id="btnConvertSkills" onclick="exec('convertToSkills')">Convert to Skills</button>
             <button onclick="exec('applyBestPractices')">Apply Best Practices</button>
             <button class="secondary" onclick="exec('scanCompression')">Scan Compression</button>
-            <button class="secondary" onclick="exec('syncDictionary')">Sync Dictionary</button>
+            <button class="secondary" id="btnSyncDictionary" onclick="exec('syncDictionary')">Sync Dictionary</button>
           </div>
           <div id="bestPracticesStatus" class="muted" style="margin-top:10px"></div>
           <div id="compressionStatus" class="muted" style="margin-top:6px"></div>
@@ -317,8 +317,8 @@ export class ActionsViewProvider implements vscode.WebviewViewProvider {
             <span class="badge" id="licenseBadge">License: —</span>
           </div>
           <div class="row">
-            <button class="secondary" onclick="exec('upgradePro')">Upgrade</button>
-            <button class="secondary" onclick="exec('enterLicenseKey')">Enter Key</button>
+            <button class="secondary" id="btnUpgrade" onclick="exec('upgradePro')">Upgrade</button>
+            <button class="secondary" id="btnEnterKey" onclick="exec('enterLicenseKey')">Enter Key</button>
             <button class="secondary" onclick="exec('resendLicenseKey')">Resend</button>
             <button class="secondary" onclick="exec('licenseDiagnostics')">Diagnostics</button>
             <button class="secondary" onclick="exec('forgetLicenseKey')">Forget</button>
@@ -384,6 +384,16 @@ export class ActionsViewProvider implements vscode.WebviewViewProvider {
             const isPro = !!d.isPro;
             const badge = document.getElementById('licenseBadge');
             if (badge) badge.textContent = 'License: ' + (isPro ? 'Pro active' : 'Free');
+
+            const btnUpgrade = document.getElementById('btnUpgrade');
+            const btnEnter = document.getElementById('btnEnterKey');
+            if (btnUpgrade) btnUpgrade.style.display = isPro ? 'none' : '';
+            if (btnEnter) btnEnter.style.display = isPro ? 'none' : '';
+
+            const btnConvert = document.getElementById('btnConvertSkills');
+            const btnDict = document.getElementById('btnSyncDictionary');
+            if (btnConvert) btnConvert.textContent = isPro ? 'Convert to Skills' : 'Convert to Skills (Pro)';
+            if (btnDict) btnDict.textContent = isPro ? 'Sync Dictionary' : 'Sync Dictionary (Pro)';
 
             const totalTokens = typeof d.totalTokens === 'number' ? d.totalTokens : 0;
             const totalCost = typeof d.totalCost === 'number' ? d.totalCost : 0;
