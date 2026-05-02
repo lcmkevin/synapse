@@ -4,6 +4,7 @@ import { WebSocketServer, WebSocket } from "ws";
 import * as http from "http";
 import * as fs from "fs/promises";
 import * as path from "path";
+import { randomBytes } from "crypto";
 
 type ClientInfo = {
   id: string;
@@ -22,7 +23,7 @@ type SynapseRule = {
 };
 
 function nowId(prefix: string): string {
-  return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
+  return `${prefix}-${Date.now()}-${randomBytes(4).toString("hex")}`;
 }
 
 function workspaceDir(raw?: string): string {
@@ -189,8 +190,27 @@ export class SynapseWS {
 
       if (req.url === "/api/sync" && req.method === "POST") {
         let body = "";
-        req.on("data", (chunk) => (body += chunk));
+        let total = 0;
+        let done = false;
+        req.on("data", (chunk) => {
+          if (done) return;
+          const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk || ""), "utf8");
+          total += buf.length;
+          if (total > 64 * 1024) {
+            done = true;
+            res.writeHead(413, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ success: false, error: "Payload too large" }));
+            try {
+              req.destroy();
+            } catch {
+              void 0;
+            }
+            return;
+          }
+          body += buf.toString("utf8");
+        });
         req.on("end", async () => {
+          if (done) return;
           try {
             const parsed = JSON.parse(body || "{}");
             const workspace = workspaceDir(parsed.workspace);
@@ -332,8 +352,9 @@ export class SynapseWS {
   }
 
   start() {
-    this.httpServer.listen(this.port, () => {
-      process.stdout.write(`🧠 Synapse WS: ws://localhost:${this.port} | API: http://localhost:${this.port}/api/sync\n`);
+    const host = typeof process.env.WS_HOST === "string" && process.env.WS_HOST.trim() ? process.env.WS_HOST.trim() : "127.0.0.1";
+    this.httpServer.listen(this.port, host, () => {
+      process.stdout.write(`🧠 Synapse WS: ws://${host}:${this.port} | API: http://${host}:${this.port}/api/sync\n`);
     });
   }
 }

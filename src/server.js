@@ -1,6 +1,7 @@
 "use strict";
 
 const path = require("path");
+const crypto = require("crypto");
 const http = require("http");
 const express = require("express");
 const WebSocket = require("ws");
@@ -13,8 +14,19 @@ const core = require("./core");
 const PUBLIC_DIR = path.resolve(__dirname, "..", "public");
 const DEFAULT_TEMPLATE_ROOT = path.resolve(__dirname, "..", "Template");
 const PORT = Number(process.env.SYNAPSE_PORT || 3456);
+const HOST = typeof process.env.SYNAPSE_HOST === "string" && process.env.SYNAPSE_HOST.trim() ? process.env.SYNAPSE_HOST.trim() : "127.0.0.1";
 
 const app = express();
+function isLoopbackAddress(addr) {
+  const a = typeof addr === "string" ? addr : "";
+  return a === "127.0.0.1" || a === "::1" || a === "::ffff:127.0.0.1";
+}
+
+app.use((req, res, next) => {
+  const remote = req && req.socket ? req.socket.remoteAddress : "";
+  if (!isLoopbackAddress(remote)) return res.status(403).json({ error: "Forbidden" });
+  return next();
+});
 app.use(express.static(PUBLIC_DIR));
 app.use(express.json({ limit: "50mb" }));
 
@@ -26,6 +38,11 @@ let lastSyncPayload = null;
 
 server.on("upgrade", (req, socket, head) => {
   try {
+    const remote = socket && socket.remoteAddress ? socket.remoteAddress : "";
+    if (!isLoopbackAddress(remote)) {
+      socket.destroy();
+      return;
+    }
     const url = new URL(req.url, "http://localhost");
     if (url.pathname !== "/ws/sync-status") {
       socket.destroy();
@@ -194,7 +211,7 @@ const PREVIEW_SESSION_TTL_MS = 15 * 60 * 1000;
 const previewSessions = new Map();
 
 function randomId() {
-  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+  return `${Date.now().toString(36)}_${crypto.randomBytes(16).toString("hex")}`;
 }
 
 function reapSessions() {
@@ -540,6 +557,6 @@ app.post("/api/previewSyncClose", async (req, res) => {
   }
 });
 
-server.listen(PORT, () => {
-  process.stdout.write(`🧠 Synapse Dashboard running at http://localhost:${PORT}\n`);
+server.listen(PORT, HOST, () => {
+  process.stdout.write(`🧠 Synapse Dashboard running at http://${HOST}:${PORT}\n`);
 });

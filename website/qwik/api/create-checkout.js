@@ -101,15 +101,31 @@ async function findActiveLicenseByEmail(email) {
   return null;
 }
 
-function readJsonBody(req) {
+function readJsonBody(req, maxBytes = 64 * 1024) {
   return new Promise((resolve) => {
     if (req?.body && typeof req.body === "object") return resolve(req.body);
 
     let data = "";
+    let total = 0;
+    let done = false;
+
     req.on("data", (chunk) => {
-      data += chunk.toString();
+      if (done) return;
+      const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk || ""), "utf8");
+      total += buf.length;
+      if (total > maxBytes) {
+        done = true;
+        try {
+          req.destroy();
+        } catch {
+          void 0;
+        }
+        return resolve({ __synapseBodyError: "too_large" });
+      }
+      data += buf.toString("utf8");
     });
     req.on("end", () => {
+      if (done) return;
       try {
         resolve(data ? JSON.parse(data) : {});
       } catch {
@@ -267,6 +283,9 @@ async function createCheckout(req, res) {
     }
 
     const body = await readJsonBody(req);
+    if (body && typeof body === "object" && body.__synapseBodyError === "too_large") {
+      return res.status(413).json({ ok: false, error: "Payload too large" });
+    }
     const customerEmail = typeof body.customerEmail === "string" ? body.customerEmail.trim() : "";
     const planCode = normalizePlanCode(body?.plan);
     const legacyPriceAlias = typeof body.price_id === "string" ? body.price_id.trim() : "";

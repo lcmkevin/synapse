@@ -14,8 +14,13 @@ function generateLicenseKey() {
   const LICENSE_SECRET = process.env.LICENSE_SECRET ?? process.env.LICENSE_SALT;
   if (!LICENSE_SECRET) throw new Error("LICENSE_SECRET is required");
   const timestampBase36 = Math.floor(Date.now() / 1000).toString(36);
-  const signatureHex = crypto.createHmac("sha256", LICENSE_SECRET).update(timestampBase36).digest("hex").slice(0, 16);
-  return `synapse_${timestampBase36}_${signatureHex}`;
+  const nonceHex = crypto.randomBytes(8).toString("hex");
+  const signatureHex = crypto
+    .createHmac("sha256", LICENSE_SECRET)
+    .update(`${timestampBase36}.${nonceHex}`)
+    .digest("hex")
+    .slice(0, 32);
+  return `synapse2_${timestampBase36}_${nonceHex}_${signatureHex}`;
 }
 
 function getEmailConfig() {
@@ -211,13 +216,31 @@ function verifyStripeSignature(rawBody, signatureHeader, secret, toleranceSecond
   return match ? { ok: true } : { ok: false, reason: "Invalid Stripe-Signature" };
 }
 
-function readRawBody(req) {
+function readRawBody(req, maxBytes = 1024 * 1024) {
   return new Promise((resolve, reject) => {
     if (Buffer.isBuffer(req.body)) return resolve(req.body);
     if (typeof req.body === "string") return resolve(Buffer.from(req.body, "utf8"));
 
     const chunks = [];
-    req.on("data", (chunk) => chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)));
+    let total = 0;
+    let done = false;
+    req.on("data", (chunk) => {
+      if (done) return;
+      const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+      total += buf.length;
+      if (total > maxBytes) {
+        done = true;
+        try {
+          req.destroy();
+        } catch {
+          void 0;
+        }
+        const err = new Error("Payload too large");
+        err.statusCode = 413;
+        return reject(err);
+      }
+      chunks.push(buf);
+    });
     req.on("end", () => resolve(Buffer.concat(chunks)));
     req.on("error", reject);
   });
@@ -316,7 +339,15 @@ async function handleStripeWebhook(req, res) {
   const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
   if (!webhookSecret) return res.status(500).json({ ok: false, error: "Server misconfigured" });
 
-  const rawBody = await readRawBody(req);
+  let rawBody;
+  try {
+    rawBody = await readRawBody(req);
+  } catch (e) {
+    if (e && typeof e === "object" && e.statusCode === 413) {
+      return res.status(413).json({ ok: false, error: "Payload too large" });
+    }
+    return res.status(400).json({ ok: false, error: "Invalid body" });
+  }
   const sigHeader = req.headers["stripe-signature"];
   const verified = verifyStripeSignature(rawBody, sigHeader, webhookSecret);
   if (!verified.ok) return res.status(400).json({ ok: false, error: verified.reason });

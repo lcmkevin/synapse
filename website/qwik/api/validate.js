@@ -9,15 +9,31 @@ function getLicenseKeyMaxAgeMs() {
   return Math.floor(days * 24 * 60 * 60 * 1000);
 }
 
-function readJsonBody(req) {
+function readJsonBody(req, maxBytes = 64 * 1024) {
   return new Promise((resolve) => {
     if (req?.body && typeof req.body === "object") return resolve(req.body);
 
     let data = "";
+    let total = 0;
+    let done = false;
+
     req.on("data", (chunk) => {
-      data += chunk.toString();
+      if (done) return;
+      const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk || ""), "utf8");
+      total += buf.length;
+      if (total > maxBytes) {
+        done = true;
+        try {
+          req.destroy();
+        } catch {
+          void 0;
+        }
+        return resolve({ __synapseBodyError: "too_large" });
+      }
+      data += buf.toString("utf8");
     });
     req.on("end", () => {
+      if (done) return;
       try {
         resolve(data ? JSON.parse(data) : {});
       } catch {
@@ -39,9 +55,25 @@ function extractKey(req) {
 }
 
 function parseKey(licenseKey) {
-  const match = typeof licenseKey === "string" ? licenseKey.match(/^synapse_([a-z0-9]+)_([a-f0-9]{16})$/) : null;
-  if (!match) return { valid: false, reason: "Invalid format" };
-  const [, timestampBase36, signatureHex] = match;
+  const key = typeof licenseKey === "string" ? licenseKey.trim() : "";
+  if (!key) return { valid: false, reason: "Invalid format" };
+
+  const v2 = key.match(/^synapse2_([a-z0-9]+)_([a-f0-9]{16})_([a-f0-9]{32})$/);
+  if (v2) {
+    const [, timestampBase36, nonceHex, signatureHex] = v2;
+    const tsSeconds = parseInt(timestampBase36, 36);
+    if (!Number.isFinite(tsSeconds) || tsSeconds <= 0) return { valid: false, reason: "Invalid timestamp" };
+    const maxAgeMs = getLicenseKeyMaxAgeMs();
+    if (maxAgeMs > 0) {
+      const issuedAtMs = tsSeconds * 1000;
+      if (Date.now() - issuedAtMs > maxAgeMs) return { valid: false, reason: "License expired" };
+    }
+    return { valid: true, version: 2, timestampBase36, nonceHex, signatureHex };
+  }
+
+  const v1 = key.match(/^synapse_([a-z0-9]+)_([a-f0-9]{16})$/);
+  if (!v1) return { valid: false, reason: "Invalid format" };
+  const [, timestampBase36, signatureHex] = v1;
   const tsSeconds = parseInt(timestampBase36, 36);
   if (!Number.isFinite(tsSeconds) || tsSeconds <= 0) return { valid: false, reason: "Invalid timestamp" };
   const maxAgeMs = getLicenseKeyMaxAgeMs();
@@ -49,16 +81,21 @@ function parseKey(licenseKey) {
     const issuedAtMs = tsSeconds * 1000;
     if (Date.now() - issuedAtMs > maxAgeMs) return { valid: false, reason: "License expired" };
   }
-  return { valid: true, timestampBase36, signatureHex };
+  return { valid: true, version: 1, timestampBase36, signatureHex };
 }
 
 function hmacSignature(timestampBase36, secret) {
   return crypto.createHmac("sha256", secret).update(timestampBase36).digest("hex").slice(0, 16);
 }
 
-function safeEqualHex16(a, b) {
+function hmacSignatureV2(timestampBase36, nonceHex, secret) {
+  return crypto.createHmac("sha256", secret).update(`${timestampBase36}.${nonceHex}`).digest("hex").slice(0, 32);
+}
+
+function safeEqualHex(a, b) {
   if (typeof a !== "string" || typeof b !== "string") return false;
-  if (a.length !== 16 || b.length !== 16) return false;
+  if (!a || !b) return false;
+  if (a.length !== b.length) return false;
   try {
     return crypto.timingSafeEqual(Buffer.from(a, "hex"), Buffer.from(b, "hex"));
   } catch {
@@ -185,7 +222,11 @@ async function validateLicense(req, res) {
     return res.status(500).json({ valid: false, reason: "Missing LICENSE_SALT or LICENSE_SECRET" });
   }
 
-  req.body = await readJsonBody(req);
+  const body = await readJsonBody(req);
+  if (body && typeof body === "object" && body.__synapseBodyError === "too_large") {
+    return res.status(413).json({ valid: false, reason: "Payload too large" });
+  }
+  req.body = body;
 
   const licenseKey = extractKey(req);
   if (!licenseKey) {
@@ -197,8 +238,11 @@ async function validateLicense(req, res) {
     return res.status(200).json({ valid: false, reason: parsed.reason });
   }
 
-  const expected = hmacSignature(parsed.timestampBase36, LICENSE_SECRET);
-  const ok = safeEqualHex16(expected, parsed.signatureHex);
+  const expected =
+    parsed.version === 2
+      ? hmacSignatureV2(parsed.timestampBase36, parsed.nonceHex, LICENSE_SECRET)
+      : hmacSignature(parsed.timestampBase36, LICENSE_SECRET);
+  const ok = safeEqualHex(expected, parsed.signatureHex);
   if (!ok) {
     return res.status(200).json({ valid: false, reason: "Invalid signature" });
   }

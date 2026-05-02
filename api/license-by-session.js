@@ -7,15 +7,31 @@ try {
   nodemailer = null;
 }
 
-function readJsonBody(req) {
+function readJsonBody(req, maxBytes = 64 * 1024) {
   return new Promise((resolve) => {
     if (req?.body && typeof req.body === "object") return resolve(req.body);
 
     let data = "";
+    let total = 0;
+    let done = false;
+
     req.on("data", (chunk) => {
-      data += chunk.toString();
+      if (done) return;
+      const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk || ""), "utf8");
+      total += buf.length;
+      if (total > maxBytes) {
+        done = true;
+        try {
+          req.destroy();
+        } catch {
+          void 0;
+        }
+        return resolve({ __synapseBodyError: "too_large" });
+      }
+      data += buf.toString("utf8");
     });
     req.on("end", () => {
+      if (done) return;
       try {
         resolve(data ? JSON.parse(data) : {});
       } catch {
@@ -203,8 +219,13 @@ function generateLicenseKey() {
   const LICENSE_SECRET = process.env.LICENSE_SECRET ?? process.env.LICENSE_SALT;
   if (!LICENSE_SECRET) throw new Error("LICENSE_SECRET is required");
   const timestampBase36 = Math.floor(Date.now() / 1000).toString(36);
-  const signatureHex = crypto.createHmac("sha256", LICENSE_SECRET).update(timestampBase36).digest("hex").slice(0, 16);
-  return `synapse_${timestampBase36}_${signatureHex}`;
+  const nonceHex = crypto.randomBytes(8).toString("hex");
+  const signatureHex = crypto
+    .createHmac("sha256", LICENSE_SECRET)
+    .update(`${timestampBase36}.${nonceHex}`)
+    .digest("hex")
+    .slice(0, 32);
+  return `synapse2_${timestampBase36}_${nonceHex}_${signatureHex}`;
 }
 
 function getSessionId(req) {
@@ -325,6 +346,9 @@ async function handler(req, res) {
     const sessionIdFromQuery = getSessionId(req);
     const tokenFromQuery = getAccessToken(req);
     const body = sessionIdFromQuery ? null : await readJsonBody(req);
+    if (body && typeof body === "object" && body.__synapseBodyError === "too_large") {
+      return res.status(413).json({ ok: false, error: "Payload too large" });
+    }
     const sessionIdFromBody = body && typeof body.session_id === "string" ? body.session_id.trim() : "";
     const tokenFromBody = body && typeof body.token === "string" ? body.token.trim() : "";
     const emailFromBody = body && typeof body.email === "string" ? body.email : "";
