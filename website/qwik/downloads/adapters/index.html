@@ -165,7 +165,13 @@
           setStatus(`Found ${list.length} adapters.`);
           if (gridEl) gridEl.innerHTML = list.map(renderCard).join("");
         } catch {
-          setStatus("Adapters index not found. Run: node scripts/export-adapters.js (with SUPABASE_URL + SUPABASE_ANON_KEY) and redeploy.");
+          const isDev = location.hostname === "localhost" || location.hostname === "127.0.0.1" || location.search.includes("debug=1");
+          if (isDev) {
+            console.error("Adapters index not found. Run: node scripts/export-adapters.js (with SUPABASE_URL + SUPABASE_ANON_KEY) and redeploy.");
+          }
+          setStatus(
+            "Adapter downloads are temporarily unavailable. Please refresh and try again. If you have Pro, run: synapse adapters update --all. Otherwise, check the Docs and GitHub Releases for the latest install options."
+          );
         }
       }
 
