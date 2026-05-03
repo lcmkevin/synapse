@@ -1,0 +1,32 @@
+[
+  {
+    "id": "cline",
+    "version": "1.0.0",
+    "releaseNotes": "Default adapter placeholder. Install Synapse CLI and run: synapse adapters update cline (Pro auto-updates; Free uses manual download).",
+    "downloadUrl": "https://labs-synapse.com/downloads/adapters/cline.json"
+  },
+  {
+    "id": "cursor",
+    "version": "1.0.0",
+    "releaseNotes": "Default adapter placeholder. Install Synapse CLI and run: synapse adapters update cursor (Pro auto-updates; Free uses manual download).",
+    "downloadUrl": "https://labs-synapse.com/downloads/adapters/cursor.json"
+  },
+  {
+    "id": "trae",
+    "version": "1.0.0",
+    "releaseNotes": "Default adapter placeholder. Install Synapse CLI and run: synapse adapters update trae (Pro auto-updates; Free uses manual download).",
+    "downloadUrl": "https://labs-synapse.com/downloads/adapters/trae.json"
+  },
+  {
+    "id": "windsurf",
+    "version": "1.0.0",
+    "releaseNotes": "Default adapter placeholder. Install Synapse CLI and run: synapse adapters update windsurf (Pro auto-updates; Free uses manual download).",
+    "downloadUrl": "https://labs-synapse.com/downloads/adapters/windsurf.json"
+  },
+  {
+    "id": "zed",
+    "version": "1.0.0",
+    "releaseNotes": "Default adapter placeholder. Install Synapse CLI and run: synapse adapters update zed (Pro auto-updates; Free uses manual download).",
+    "downloadUrl": "https://labs-synapse.com/downloads/adapters/zed.json"
+  }
+]

@@ -1,0 +1,13 @@
+{
+  "id": "zed",
+  "version": "1.0.0",
+  "minCliVersion": null,
+  "requiresPro": false,
+  "releaseNotes": "Default adapter placeholder. For the latest adapter, install Synapse CLI and run: synapse adapters update zed",
+  "downloadUrl": "https://labs-synapse.com/downloads/adapters/zed.json",
+  "isActive": true,
+  "updatedAt": "2026-05-03T00:00:00.000Z",
+  "config": {
+    "schemaVersion": 1
+  }
+}
