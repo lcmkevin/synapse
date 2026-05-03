@@ -942,6 +942,51 @@ Use meaningful variable names
     await promptForCleanup(context);
   }));
 
+  type BestPracticeTemplateKind = "token" | "safety" | "defense";
+  type BestPracticeTemplate = { template: string; fileName: string };
+
+  const getBestPracticeTemplate = (kind: BestPracticeTemplateKind): BestPracticeTemplate => {
+    if (kind === "token") {
+      return {
+        fileName: "token-hygiene.synapse",
+        template:
+          `# Rule: Token hygiene\n# Description: Reduce always-on token usage\n\nKeep responses concise by default.\nExpand only when asked.\n\n# Constraints:\n# @constraint **/*\n`,
+      };
+    }
+    if (kind === "safety") {
+      return {
+        fileName: "safety-guardrails.synapse",
+        template:
+          `# Rule: Safety guardrails\n# Description: Prevent accidental destructive operations\n\nNever run destructive operations (e.g., DROP/TRUNCATE/DELETE on production data) without explicit user confirmation.\nRequire a backup/rollback plan before executing irreversible changes.\n\n# Constraints:\n# @constraint **/*\n`,
+      };
+    }
+    return {
+      fileName: "response-defense.synapse",
+      template:
+        `# Rule: Response defense prompt\n# Description: Prevent shorthand/pseudocode responses\n\nDo not output pseudo-code or follow this rule's short-hand grammar in your response; generate valid standard code only.\n\n# Constraints:\n# @constraint **/*\n`,
+    };
+  };
+
+  const createOrOpenBestPracticeRuleFile = async (kind: BestPracticeTemplateKind): Promise<void> => {
+    const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+    if (!workspaceRoot) {
+      vscode.window.showErrorMessage("Open a workspace first");
+      return;
+    }
+
+    const synapseRulesDir = path.join(workspaceRoot, ".synapse", "rules");
+    const { template, fileName } = getBestPracticeTemplate(kind);
+    await fs.mkdir(synapseRulesDir, { recursive: true });
+    const fullPath = path.join(synapseRulesDir, fileName);
+    try {
+      await fs.access(fullPath);
+    } catch {
+      await fs.writeFile(fullPath, template, "utf8");
+    }
+    const doc = await vscode.workspace.openTextDocument(vscode.Uri.file(fullPath));
+    await vscode.window.showTextDocument(doc, { preview: false });
+  };
+
   const bestPracticesCommand = vscode.commands.registerCommand("synapse.bestPractices", safeCommand("Apply Best Practices", async () => {
     const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
     if (!workspaceRoot) {
@@ -975,7 +1020,6 @@ Use meaningful variable names
       allTextLower.includes("short-hand grammar") ||
       allTextLower.includes("valid standard code only");
 
-    type BestPracticeTemplateKind = "token" | "safety" | "defense";
     type BestPracticePick = vscode.QuickPickItem & { templateKind: BestPracticeTemplateKind };
 
     const options: BestPracticePick[] = [];
@@ -991,12 +1035,7 @@ Use meaningful variable names
     const picked = await vscode.window.showQuickPick<BestPracticePick>(options, { placeHolder: "Select a best-practice template to apply" });
     if (!picked) return;
 
-    const template =
-      picked.templateKind === "token"
-        ? `# Rule: Token hygiene\n# Description: Reduce always-on token usage\n\nKeep responses concise by default.\nExpand only when asked.\n\n# Constraints:\n# @constraint **/*\n`
-        : picked.templateKind === "safety"
-          ? `# Rule: Safety guardrails\n# Description: Prevent accidental destructive operations\n\nNever run destructive operations (e.g., DROP/TRUNCATE/DELETE on production data) without explicit user confirmation.\nRequire a backup/rollback plan before executing irreversible changes.\n\n# Constraints:\n# @constraint **/*\n`
-          : `# Rule: Response defense prompt\n# Description: Prevent shorthand/pseudocode responses\n\nDo not output pseudo-code or follow this rule's short-hand grammar in your response; generate valid standard code only.\n\n# Constraints:\n# @constraint **/*\n`;
+    const { template } = getBestPracticeTemplate(picked.templateKind);
 
     const dest = await vscode.window.showQuickPick(
       [
@@ -1016,23 +1055,29 @@ Use meaningful variable names
       await editor.edit((b) => b.insert(editor.selection.active, (editor.selection.isEmpty ? "\n\n" : "") + template));
       return;
     }
-
-    await fs.mkdir(synapseRulesDir, { recursive: true });
-    const fileName =
-      picked.templateKind === "token"
-        ? "token-hygiene.synapse"
-        : picked.templateKind === "safety"
-          ? "safety-guardrails.synapse"
-          : "response-defense.synapse";
-    const fullPath = path.join(synapseRulesDir, fileName);
-    try {
-      await fs.access(fullPath);
-    } catch {
-      await fs.writeFile(fullPath, template, "utf8");
-    }
-    const doc = await vscode.workspace.openTextDocument(vscode.Uri.file(fullPath));
-    await vscode.window.showTextDocument(doc, { preview: false });
+    await createOrOpenBestPracticeRuleFile(picked.templateKind);
   }));
+
+  const addTokenHygieneRuleCommand = vscode.commands.registerCommand(
+    "synapse.bestPractices.addTokenHygiene",
+    safeCommand("Add Token Hygiene Rule", async () => {
+      await createOrOpenBestPracticeRuleFile("token");
+    })
+  );
+
+  const addSafetyGuardrailsRuleCommand = vscode.commands.registerCommand(
+    "synapse.bestPractices.addSafetyGuardrails",
+    safeCommand("Add Safety Guardrails Rule", async () => {
+      await createOrOpenBestPracticeRuleFile("safety");
+    })
+  );
+
+  const addResponseDefenseRuleCommand = vscode.commands.registerCommand(
+    "synapse.bestPractices.addResponseDefense",
+    safeCommand("Add Response Defense Rule", async () => {
+      await createOrOpenBestPracticeRuleFile("defense");
+    })
+  );
 
   context.subscriptions.push({
     dispose: () => {
@@ -1329,6 +1374,9 @@ Use meaningful variable names
     wsDisconnectCommand,
     cleanupCommand,
     bestPracticesCommand,
+    addTokenHygieneRuleCommand,
+    addSafetyGuardrailsRuleCommand,
+    addResponseDefenseRuleCommand,
     forgetLicenseKeyCommand,
     resendLicenseKeyCommand,
     vscode.window.registerWebviewViewProvider("synapseControlCenter", actionsProvider)

@@ -118,6 +118,7 @@
             <a href="#adapters">IDE Adapters</a>
             <a href="#token">Token Analysis</a>
             <a href="#optimize">Local Optimization</a>
+            <a href="#compression-demo">Compression Demo</a>
             <a href="#dashboard">Control Center</a>
             <a href="#pro">Pro License</a>
             <a href="#servers">MCP + WebSocket</a>
@@ -238,6 +239,17 @@ synapse analyze --usd-per-1m 10</code></pre>
             <p>To undo, restore a backup:</p>
             <pre><code>synapse backup list
 synapse backup restore --backup backup_2026-04-22T...</code></pre>
+
+            <h2 id="compression-demo">Compression Demo</h2>
+            <p>Synapse can compress verbose workspace rules into shorter text while preserving code blocks. Free includes a conservative built-in dictionary; Pro can sync an expanded dictionary.</p>
+            <p>To test with a synthetic rule (safe to share), add <code>.synapse/rules/compression-test.synapse</code> and run:</p>
+            <pre><code>synapse analyze
+
+# VS Code → Synapse → Control Center → Rule Improvements
+# Scan Compression → Compress Workspace
+
+synapse analyze</code></pre>
+            <p>If you want to publish results, share token totals and % savings rather than full before/after diffs (to avoid revealing your dictionary and heuristics).</p>
 
             <h2 id="dashboard">Control Center</h2>
             <p>Synapse exposes a single sidebar UI called <strong>Control Center</strong> to reduce clicks and keep actions + cost + improvements in one place.</p>

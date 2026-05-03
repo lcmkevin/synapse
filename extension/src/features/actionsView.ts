@@ -77,6 +77,15 @@ export class ActionsViewProvider implements vscode.WebviewViewProvider {
         case "applyBestPractices":
           await vscode.commands.executeCommand("synapse.bestPractices");
           break;
+        case "addTokenHygiene":
+          await vscode.commands.executeCommand("synapse.bestPractices.addTokenHygiene");
+          break;
+        case "addSafetyGuardrails":
+          await vscode.commands.executeCommand("synapse.bestPractices.addSafetyGuardrails");
+          break;
+        case "addResponseDefense":
+          await vscode.commands.executeCommand("synapse.bestPractices.addResponseDefense");
+          break;
         case "syncDictionary":
           await vscode.commands.executeCommand("synapse.ruleCompressor.syncDictionary");
           break;
@@ -307,6 +316,11 @@ export class ActionsViewProvider implements vscode.WebviewViewProvider {
             <button class="secondary" id="btnSyncDictionary" onclick="exec('syncDictionary')">Sync Dictionary</button>
           </div>
           <div id="bestPracticesStatus" class="muted" style="margin-top:10px"></div>
+          <div id="bestPracticesActions" class="row" style="margin-top:8px; display:none">
+            <button class="secondary" id="bpTokenBtn" onclick="exec('addTokenHygiene')">Add Token Hygiene</button>
+            <button class="secondary" id="bpSafetyBtn" onclick="exec('addSafetyGuardrails')">Add Safety Guardrails</button>
+            <button class="secondary" id="bpDefenseBtn" onclick="exec('addResponseDefense')">Add Response Defense</button>
+          </div>
           <div id="compressionStatus" class="muted" style="margin-top:6px"></div>
         </div>
       </div>
@@ -425,6 +439,16 @@ export class ActionsViewProvider implements vscode.WebviewViewProvider {
             if (d.missingDefense) missing.push('Response defense');
             const el = document.getElementById('bestPracticesStatus');
             if (el) el.textContent = missing.length ? ('Missing: ' + missing.join(', ')) : 'Best practices: OK';
+
+            const actions = document.getElementById('bestPracticesActions');
+            const tokenBtn = document.getElementById('bpTokenBtn');
+            const safetyBtn = document.getElementById('bpSafetyBtn');
+            const defenseBtn = document.getElementById('bpDefenseBtn');
+            if (tokenBtn) tokenBtn.style.display = d.missingTokenHygiene ? '' : 'none';
+            if (safetyBtn) safetyBtn.style.display = d.missingSafety ? '' : 'none';
+            if (defenseBtn) defenseBtn.style.display = d.missingDefense ? '' : 'none';
+            const anyMissing = !!(d.missingTokenHygiene || d.missingSafety || d.missingDefense);
+            if (actions) actions.style.display = anyMissing ? '' : 'none';
             return;
           }
         });
