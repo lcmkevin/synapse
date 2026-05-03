@@ -2,6 +2,8 @@
 import * as vscode from "vscode";
 import { spawn } from "child_process";
 import * as fs from "fs/promises";
+import * as http from "http";
+import * as https from "https";
 import * as os from "os";
 import * as path from "path";
 import { AdapterManager } from "./compiler/adapter-manager"; // NEW:
@@ -23,6 +25,124 @@ function backupRootDir(): string {
 
 async function ensureDir(p: string): Promise<void> {
   await fs.mkdir(p, { recursive: true });
+}
+
+type CompressionMetricsMode = "off" | "local" | "upload";
+
+function getCompressionMetricsMode(): CompressionMetricsMode {
+  const raw = vscode.workspace.getConfiguration("synapse").get<string>("compressionMetrics");
+  const v = typeof raw === "string" ? raw.trim().toLowerCase() : "";
+  if (v === "local" || v === "upload") return v;
+  return "off";
+}
+
+async function appendJsonlLine(filePath: string, payload: unknown): Promise<void> {
+  const dir = path.dirname(filePath);
+  await ensureDir(dir);
+  const line = JSON.stringify(payload) + "\n";
+  await fs.appendFile(filePath, line, "utf8");
+  if (process.platform !== "win32") {
+    try {
+      await fs.chmod(filePath, 0o600);
+    } catch {
+      void 0;
+    }
+  }
+}
+
+async function postJson(urlString: string, body: unknown): Promise<{ status: number; json: any }> {
+  return new Promise((resolve, reject) => {
+    const url = new URL(urlString);
+    const lib = url.protocol === "http:" ? http : https;
+    const payload = JSON.stringify(body ?? {});
+    const req = lib.request(
+      {
+        protocol: url.protocol,
+        hostname: url.hostname,
+        port: url.port,
+        path: url.pathname + url.search,
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+          "Content-Length": Buffer.byteLength(payload),
+        },
+      },
+      (res) => {
+        let data = "";
+        res.on("data", (chunk) => {
+          data += chunk.toString();
+        });
+        res.on("end", () => {
+          const status = res.statusCode || 0;
+          if (!data) return resolve({ status, json: null });
+          try {
+            resolve({ status, json: JSON.parse(data) });
+          } catch {
+            resolve({ status, json: null });
+          }
+        });
+      }
+    );
+    req.on("error", reject);
+    req.write(payload);
+    req.end();
+  });
+}
+
+async function recordCompressionMetric(
+  context: vscode.ExtensionContext,
+  event: {
+    source: "selection" | "workspace";
+    beforeTokens: number;
+    afterTokens: number;
+    savingsPercent: number;
+    fileCount?: number;
+    hitCounts?: Record<string, number>;
+    isPro: boolean;
+  }
+): Promise<void> {
+  const mode = getCompressionMetricsMode();
+  if (mode === "off") return;
+
+  const payload = {
+    ts: new Date().toISOString(),
+    source: event.source,
+    beforeTokens: event.beforeTokens,
+    afterTokens: event.afterTokens,
+    savingsPercent: event.savingsPercent,
+    fileCount: typeof event.fileCount === "number" ? event.fileCount : undefined,
+    hitCounts: event.hitCounts && Object.keys(event.hitCounts).length ? event.hitCounts : undefined,
+    isPro: event.isPro,
+    extensionVersion: context.extension?.packageJSON?.version,
+    platform: process.platform,
+  };
+
+  if (mode === "local") {
+    const p = path.join(os.homedir(), ".synapse", "telemetry", "compression-metrics.jsonl");
+    await appendJsonlLine(p, payload);
+    return;
+  }
+
+  const key = await context.secrets.get("synapse.licenseKey.v1");
+  const licenseKey = typeof key === "string" ? key.trim() : "";
+  if (!licenseKey) return;
+
+  let base = "https://www.labs-synapse.com";
+  try {
+    const configured = vscode.workspace.getConfiguration("synapse").get<string>("licenseApiUrl");
+    const trimmed = typeof configured === "string" && configured.trim() ? configured.trim().replace(/\/+$/, "") : base;
+    base = /^https?:\/\/labs-synapse\.com$/i.test(trimmed) ? trimmed.replace(/\/\/labs-synapse\.com$/i, "//www.labs-synapse.com") : trimmed;
+  } catch {
+    void 0;
+  }
+
+  const instanceId = vscode.env.machineId || "unknown";
+  try {
+    await postJson(`${base}/api/telemetry/compression`, { licenseKey, instanceId, event: payload });
+  } catch {
+    void 0;
+  }
 }
 
 async function getCliInvocation(workspaceRoot: string): Promise<string> {
@@ -1166,6 +1286,18 @@ Use meaningful variable names
         beforeTokens: result.beforeTokens,
         afterTokens: result.afterTokens,
       });
+      try {
+        await recordCompressionMetric(context, {
+          source: "selection",
+          beforeTokens: result.beforeTokens,
+          afterTokens: result.afterTokens,
+          savingsPercent: result.savingsPercent,
+          hitCounts: (result as any).hitCounts,
+          isPro,
+        });
+      } catch {
+        void 0;
+      }
       const pct = Number.isFinite(result.savingsPercent) ? result.savingsPercent : 0;
       vscode.window.showInformationMessage(`Tokens Saved: ${pct.toFixed(1)}%`);
     })
@@ -1326,6 +1458,25 @@ Use meaningful variable names
         const totalBefore = compressible.reduce((s, x) => s + x.r.beforeTokens, 0);
         const totalAfter = compressible.reduce((s, x) => s + x.r.afterTokens, 0);
         const saved = totalBefore > 0 ? ((totalBefore - totalAfter) / totalBefore) * 100 : 0;
+        const mergedHits: Record<string, number> = {};
+        for (const item of compressible) {
+          const hits = (item.r as any).hitCounts;
+          if (!hits || typeof hits !== "object") continue;
+          for (const k of Object.keys(hits)) mergedHits[k] = (mergedHits[k] || 0) + (Number(hits[k]) || 0);
+        }
+        try {
+          await recordCompressionMetric(context, {
+            source: "workspace",
+            beforeTokens: totalBefore,
+            afterTokens: totalAfter,
+            savingsPercent: saved,
+            fileCount: compressible.length,
+            hitCounts: Object.keys(mergedHits).length ? mergedHits : undefined,
+            isPro,
+          });
+        } catch {
+          void 0;
+        }
         vscode.window.showInformationMessage(
           `Compressed ${compressible.length} file(s): ${saved.toFixed(1)}% (${totalBefore} → ${totalAfter})`
         );
@@ -1347,6 +1498,22 @@ Use meaningful variable names
       const decision = await vscode.window.showInformationMessage("Apply this compression?", "Apply", "Keep");
       if (decision === "Apply") {
         await applyFile(filePick.filePath, filePick.compressedText);
+        try {
+          const chosen = compressible.find((x) => x.filePath === filePick.filePath);
+          if (chosen) {
+            await recordCompressionMetric(context, {
+              source: "workspace",
+              beforeTokens: chosen.r.beforeTokens,
+              afterTokens: chosen.r.afterTokens,
+              savingsPercent: chosen.r.savingsPercent,
+              fileCount: 1,
+              hitCounts: (chosen.r as any).hitCounts,
+              isPro,
+            });
+          }
+        } catch {
+          void 0;
+        }
         vscode.window.showInformationMessage("Compression applied.");
       }
     })

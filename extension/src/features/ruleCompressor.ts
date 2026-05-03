@@ -6,13 +6,15 @@ export type CompressionResult = {
   beforeTokens: number;
   afterTokens: number;
   savingsPercent: number;
+  hitCounts?: Record<string, number>;
 };
 
-type ReplacementPair = { find: string; replace: string };
+type ReplacementPair = { id?: string; find: string; replace: string };
 
 type CompiledUnion = {
   regex: RegExp | null;
   replaceByGroup: Record<string, string>;
+  idByGroup: Record<string, string>;
 };
 
 type CodeStub = { placeholder: string; content: string };
@@ -104,11 +106,16 @@ function phraseToFuzzyPattern(phrase: string): string {
 
 function compileFuzzyUnion(pairs: ReplacementPair[]): CompiledUnion {
   const cleaned = pairs
-    .map((p) => ({ find: String(p.find || "").trim(), replace: String(p.replace ?? "") }))
+    .map((p, i) => ({
+      id: typeof p.id === "string" && p.id.trim() ? p.id.trim() : `free.${i}`,
+      find: String(p.find || "").trim(),
+      replace: String(p.replace ?? ""),
+    }))
     .filter((p) => p.find.length > 0)
     .sort((a, b) => b.find.length - a.find.length);
 
   const replaceByGroup: Record<string, string> = {};
+  const idByGroup: Record<string, string> = {};
   const branches: string[] = [];
 
   for (let i = 0; i < cleaned.length; i++) {
@@ -116,14 +123,15 @@ function compileFuzzyUnion(pairs: ReplacementPair[]): CompiledUnion {
     const pattern = phraseToFuzzyPattern(cleaned[i].find);
     if (!pattern) continue;
     replaceByGroup[group] = cleaned[i].replace;
+    idByGroup[group] = cleaned[i].id;
     branches.push(`(?<${group}>${pattern})`);
   }
 
-  if (branches.length === 0) return { regex: null, replaceByGroup };
-  return { regex: new RegExp(branches.join("|"), "gi"), replaceByGroup };
+  if (branches.length === 0) return { regex: null, replaceByGroup, idByGroup };
+  return { regex: new RegExp(branches.join("|"), "gi"), replaceByGroup, idByGroup };
 }
 
-function applyUnion(text: string, dict: CompiledUnion): string {
+function applyUnion(text: string, dict: CompiledUnion, hitCounts?: Record<string, number>): string {
   if (!dict.regex) return text;
   return text.replace(dict.regex, (...args: any[]) => {
     const groups = args && args.length > 0 ? args[args.length - 1] : null;
@@ -131,6 +139,8 @@ function applyUnion(text: string, dict: CompiledUnion): string {
       for (const k of Object.keys(groups)) {
         if (groups[k] !== undefined) {
           const repl = dict.replaceByGroup[k];
+          const id = dict.idByGroup[k];
+          if (hitCounts && id) hitCounts[id] = (hitCounts[id] || 0) + 1;
           return repl !== undefined ? preserveFirstLetterCase(String(args[0] || ""), repl) : args[0];
         }
       }
@@ -203,52 +213,52 @@ export class RuleCompressor {
    * Keep this list stable and conservative to avoid semantic changes.
    */
   static readonly FREE_DEFAULT_REPLACEMENTS: ReplacementPair[] = [
-    { find: "please ensure that", replace: "ensure" },
-    { find: "please make sure to", replace: "make sure to" },
-    { find: "in order to", replace: "to" },
-    { find: "you should always", replace: "always" },
-    { find: "you are required to", replace: "must" },
-    { find: "kindly provide", replace: "provide" },
-    { find: "based on the information provided", replace: "based on data" },
-    { find: "in the event that", replace: "if" },
-    { find: "for the purpose of", replace: "for" },
-    { find: "with reference to", replace: "about" },
-    { find: "it is important to note that", replace: "note:" },
-    { find: "do not under any circumstances", replace: "never" },
-    { find: "keep in mind that", replace: "remember:" },
-    { find: "it is highly recommended to", replace: "recommend:" },
-    { find: "take into consideration", replace: "consider" },
-    { find: "if and only if", replace: "iff" },
-    { find: "in case of", replace: "if" },
-    { find: "despite the fact that", replace: "although" },
-    { find: "at the end of the day", replace: "finally" },
-    { find: "as soon as possible", replace: "asap" },
-    { find: "due to the fact that", replace: "because" },
-    { find: "by means of", replace: "by" },
-    { find: "at this point in time", replace: "now" },
-    { find: "it goes without saying that", replace: "obviously" },
-    { find: "with the exception of", replace: "except" },
-    { find: "in close proximity to", replace: "near" },
-    { find: "make an effort to", replace: "try to" },
-    { find: "conduct an investigation into", replace: "investigate" },
-    { find: "has the capability to", replace: "can" },
-    { find: "is able to", replace: "can" },
-    { find: "serves to", replace: "does" },
-    { find: "utilized for", replace: "for" },
-    { find: "in the near future", replace: "soon" },
-    { find: "on a regular basis", replace: "regularly" },
-    { find: "in possession of", replace: "has" },
-    { find: "be responsible for", replace: "handle" },
-    { find: "it is clear that", replace: "clearly" },
-    { find: "it appears that", replace: "apparently" },
-    { find: "most of the time", replace: "usually" },
-    { find: "at the same time", replace: "while" },
-    { find: "for example", replace: "e.g." },
-    { find: "that is to say", replace: "i.e." },
-    { find: "with regard to", replace: "about" },
-    { find: "in addition to", replace: "plus" },
-    { find: "as a result", replace: "so" },
-    { find: "in other words", replace: "i.e." },
+    { id: "free:001", find: "please ensure that", replace: "ensure" },
+    { id: "free:002", find: "please make sure to", replace: "make sure to" },
+    { id: "free:003", find: "in order to", replace: "to" },
+    { id: "free:004", find: "you should always", replace: "always" },
+    { id: "free:005", find: "you are required to", replace: "must" },
+    { id: "free:006", find: "kindly provide", replace: "provide" },
+    { id: "free:007", find: "based on the information provided", replace: "based on data" },
+    { id: "free:008", find: "in the event that", replace: "if" },
+    { id: "free:009", find: "for the purpose of", replace: "for" },
+    { id: "free:010", find: "with reference to", replace: "about" },
+    { id: "free:011", find: "it is important to note that", replace: "note:" },
+    { id: "free:012", find: "do not under any circumstances", replace: "never" },
+    { id: "free:013", find: "keep in mind that", replace: "remember:" },
+    { id: "free:014", find: "it is highly recommended to", replace: "recommend:" },
+    { id: "free:015", find: "take into consideration", replace: "consider" },
+    { id: "free:016", find: "if and only if", replace: "iff" },
+    { id: "free:017", find: "in case of", replace: "if" },
+    { id: "free:018", find: "despite the fact that", replace: "although" },
+    { id: "free:019", find: "at the end of the day", replace: "finally" },
+    { id: "free:020", find: "as soon as possible", replace: "asap" },
+    { id: "free:021", find: "due to the fact that", replace: "because" },
+    { id: "free:022", find: "by means of", replace: "by" },
+    { id: "free:023", find: "at this point in time", replace: "now" },
+    { id: "free:024", find: "it goes without saying that", replace: "obviously" },
+    { id: "free:025", find: "with the exception of", replace: "except" },
+    { id: "free:026", find: "in close proximity to", replace: "near" },
+    { id: "free:027", find: "make an effort to", replace: "try to" },
+    { id: "free:028", find: "conduct an investigation into", replace: "investigate" },
+    { id: "free:029", find: "has the capability to", replace: "can" },
+    { id: "free:030", find: "is able to", replace: "can" },
+    { id: "free:031", find: "serves to", replace: "does" },
+    { id: "free:032", find: "utilized for", replace: "for" },
+    { id: "free:033", find: "in the near future", replace: "soon" },
+    { id: "free:034", find: "on a regular basis", replace: "regularly" },
+    { id: "free:035", find: "in possession of", replace: "has" },
+    { id: "free:036", find: "be responsible for", replace: "handle" },
+    { id: "free:037", find: "it is clear that", replace: "clearly" },
+    { id: "free:038", find: "it appears that", replace: "apparently" },
+    { id: "free:039", find: "most of the time", replace: "usually" },
+    { id: "free:040", find: "at the same time", replace: "while" },
+    { id: "free:041", find: "for example", replace: "e.g." },
+    { id: "free:042", find: "that is to say", replace: "i.e." },
+    { id: "free:043", find: "with regard to", replace: "about" },
+    { id: "free:044", find: "in addition to", replace: "plus" },
+    { id: "free:045", find: "as a result", replace: "so" },
+    { id: "free:046", find: "in other words", replace: "i.e." },
   ];
 
   private static encoder: any | null = null;
@@ -261,10 +271,11 @@ export class RuleCompressor {
   async applyCompression(text: string, _isPro: boolean): Promise<CompressionResult> {
     const raw = String(text || "");
     const beforeTokens = this.countTokens(raw);
+    const hitCounts: Record<string, number> = {};
 
     const stubbed = stubMarkdownCode(raw);
     let out = normalizeWhitespace(stripFillerOpenings(stubbed.text));
-    out = this.applyFree(out);
+    out = this.applyFree(out, hitCounts);
     out = normalizeWhitespace(out);
 
     let afterTokens = this.countTokens(out);
@@ -295,14 +306,15 @@ export class RuleCompressor {
       beforeTokens,
       afterTokens,
       savingsPercent: Number.isFinite(savingsPercent) ? Math.max(0, savingsPercent) : 0,
+      hitCounts: Object.keys(hitCounts).length ? hitCounts : undefined,
     };
   }
 
-  private applyFree(text: string): string {
+  private applyFree(text: string, hitCounts?: Record<string, number>): string {
     if (!RuleCompressor.compiledFree) {
       RuleCompressor.compiledFree = compileFuzzyUnion(RuleCompressor.FREE_DEFAULT_REPLACEMENTS);
     }
-    return applyUnion(text, RuleCompressor.compiledFree);
+    return applyUnion(text, RuleCompressor.compiledFree, hitCounts);
   }
 
   private async compressWithNativeLM(text: string): Promise<string | null> {

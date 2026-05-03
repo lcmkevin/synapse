@@ -259,6 +259,12 @@
           "default": 3,
           "description": "How many backups to keep (0 disables pruning)."
         },
+        "synapse.compressionMetrics": {
+          "type": "string",
+          "enum": ["off", "local", "upload"],
+          "default": "off",
+          "description": "Collect compression metrics (token deltas + replacement hit counts). 'local' writes to ~/.synapse/telemetry; 'upload' posts to the license API."
+        },
         "synapse.licenseApiUrl": {
           "type": "string",
           "default": "https://www.labs-synapse.com",
