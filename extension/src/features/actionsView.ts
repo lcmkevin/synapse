@@ -7,6 +7,8 @@ export class ActionsViewProvider implements vscode.WebviewViewProvider {
   private view?: vscode.WebviewView;
   private lastTelemetry?: { savingsPercent: number; beforeTokens: number; afterTokens: number };
   private tokenCounter: TokenCounter;
+  private rulesWatcher: vscode.FileSystemWatcher | null = null;
+  private refreshTimer: NodeJS.Timeout | null = null;
 
   constructor(private readonly extensionUri: vscode.Uri) {
     this.tokenCounter = new TokenCounter();
@@ -30,6 +32,7 @@ export class ActionsViewProvider implements vscode.WebviewViewProvider {
     void token;
 
     this.view = webviewView;
+    this.ensureWatchers();
 
     webviewView.webview.options = {
       enableScripts: true,
@@ -125,6 +128,28 @@ export class ActionsViewProvider implements vscode.WebviewViewProvider {
     });
 
     void this.sendAll();
+  }
+
+  private ensureWatchers(): void {
+    if (this.rulesWatcher) return;
+    const wf = vscode.workspace.workspaceFolders?.[0];
+    if (!wf) return;
+
+    const pattern = new vscode.RelativePattern(wf, "{.synapse/rules/*.synapse,.trae/rules/*.{md,mdc,rules,synapse,txt}}");
+    const watcher = vscode.workspace.createFileSystemWatcher(pattern);
+    const schedule = () => {
+      if (this.refreshTimer) clearTimeout(this.refreshTimer);
+      this.refreshTimer = setTimeout(() => {
+        if (!this.view) return;
+        void this.sendAll();
+      }, 250);
+    };
+
+    watcher.onDidChange(schedule);
+    watcher.onDidCreate(schedule);
+    watcher.onDidDelete(schedule);
+
+    this.rulesWatcher = watcher;
   }
 
   private async sendAll() {
