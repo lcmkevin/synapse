@@ -1,8 +1,8 @@
 {
-  "name": "synapse",
+  "name": "synapse-rules",
   "displayName": "Synapse Rules",
   "description": "Portable AI rules across IDEs with safe sync, token cost analysis, and zero lock-in",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "publisher": "labs-synapse",
   "icon": "icon.png",
   "repository": {
@@ -41,8 +41,8 @@
   ],
   "badges": [
     {
-      "url": "https://img.shields.io/github/stars/labs-synapse/synapse",
-      "href": "https://github.com/labs-synapse/synapse",
+      "url": "https://img.shields.io/github/stars/lcmkevin/synapse",
+      "href": "https://github.com/lcmkevin/synapse",
       "description": "GitHub Stars"
     }
   ],

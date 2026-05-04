@@ -2,9 +2,9 @@
 
 One rulebase. Any IDE. Forever.
 
-[![Marketplace Version](https://img.shields.io/visual-studio-marketplace/v/labs-synapse.synapse)](https://marketplace.visualstudio.com/items?itemName=labs-synapse.synapse)
-[![Installs](https://img.shields.io/visual-studio-marketplace/i/labs-synapse.synapse)](https://marketplace.visualstudio.com/items?itemName=labs-synapse.synapse)
-[![Rating](https://img.shields.io/visual-studio-marketplace/r/labs-synapse.synapse)](https://marketplace.visualstudio.com/items?itemName=labs-synapse.synapse)
+[![Marketplace Version](https://img.shields.io/visual-studio-marketplace/v/labs-synapse.synapse-rules)](https://marketplace.visualstudio.com/items?itemName=labs-synapse.synapse-rules)
+[![Installs](https://img.shields.io/visual-studio-marketplace/i/labs-synapse.synapse-rules)](https://marketplace.visualstudio.com/items?itemName=labs-synapse.synapse-rules)
+[![Rating](https://img.shields.io/visual-studio-marketplace/r/labs-synapse.synapse-rules)](https://marketplace.visualstudio.com/items?itemName=labs-synapse.synapse-rules)
 
 ## Write Rules Once. Use Everywhere.
 
@@ -58,4 +58,4 @@ Reserved for a future release.
 ## Links
 
 - https://labs-synapse.com
-- https://github.com/labs-synapse/synapse
+- https://github.com/lcmkevin/synapse
