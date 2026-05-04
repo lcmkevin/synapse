@@ -3,8 +3,8 @@ const https = require("https");
 
 function getStripeModeFromKey(apiKey) {
   const k = String(apiKey || "");
-  if (k.startsWith("sk_test_")) return "test";
-  if (k.startsWith("sk_live_")) return "live";
+  if (k.startsWith("sk_test_") || k.startsWith("rk_test_")) return "test";
+  if (k.startsWith("sk_live_") || k.startsWith("rk_live_")) return "live";
   return "unknown";
 }
 
