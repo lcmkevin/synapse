@@ -201,7 +201,7 @@
         {
           "id": "synapse-sidebar",
           "title": "Synapse",
-          "icon": "media/synapse-icon.svg"
+          "icon": "media/synapse-icon-from-png.svg"
         }
       ]
     },

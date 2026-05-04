@@ -1,13 +1,18 @@
-<!-- UPDATED: Synapse icon (minimal) -->
-<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
-  <defs>
-    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#6aa9ff"/>
-      <stop offset="1" stop-color="#29d17d"/>
-    </linearGradient>
-  </defs>
-  <rect x="14" y="14" width="100" height="100" rx="22" fill="url(#g)"/>
-  <path d="M40 64c10-18 38-18 48 0-10 18-38 18-48 0Z" fill="rgba(0,0,0,0.35)"/>
-  <circle cx="64" cy="64" r="10" fill="rgba(255,255,255,0.9)"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100%" height="100%">
+  <rect width="100" height="100" fill="#1e1e1e" />
+  <circle cx="50" cy="50" r="42" fill="none" stroke="#00bfff" stroke-width="3" />
+  <g fill="none" stroke="#00bfff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M50,38 C49,38 48.5,41 48.5,50 C48.5,59 49,62 50,62 C51,62 51.5,59 51.5,50 C51.5,41 51,38 50,38 Z" fill="#00bfff" />
+    <path d="M48.5,46 C40,28 24,32 25,48 C25.5,55 35,57 48.5,55" />
+    <path d="M48.5,55 C34,54 28,68 37,70 C43,71.5 47,65 48.5,60" />
+    <path d="M51.5,46 C60,28 76,32 75,48 C74.5,55 65,57 51.5,55" />
+    <path d="M51.5,55 C66,54 72,68 63,70 C57,71.5 53,65 51.5,60" />
+    <path d="M49,38 C47,34 43,33 42,33" />
+    <path d="M51,38 C53,34 57,33 58,33" />
+    <path d="M46,47 C39,36 30,37 31,46" stroke-width="1.5" />
+    <path d="M54,47 C61,36 70,37 69,46" stroke-width="1.5" />
+    <path d="M45,56 C37,56 34,63 39,65" stroke-width="1.5" />
+    <path d="M55,56 C63,56 66,63 61,65" stroke-width="1.5" />
+  </g>
 </svg>
 

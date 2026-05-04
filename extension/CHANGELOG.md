@@ -6,11 +6,14 @@
 
 - `synapse.proPriceLabel` and `synapse.proTermsLabel` settings to avoid hard-coded pricing copy.
 - Cleanup/Uninstall flow to remove local Synapse data (home dir, workspace, extension storage).
+- `synapse.compressionMetrics` opt-in setting (off/local/upload) for anonymized compression metrics.
+- Control Center: dictionary sync status (last sync time + entry count).
 
 ### Changed
 
 - Pro checkout requests now send `plan: "pro_lifetime"` (no client Stripe Price IDs).
 - Pro messaging updated to “one-time payment • no recurring fees”.
+- Control Center: auto-refresh token totals when rules change.
 
 ## [0.1.1] - 2026-04-21
 
