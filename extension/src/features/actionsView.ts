@@ -375,7 +375,7 @@ export class ActionsViewProvider implements vscode.WebviewViewProvider {
             <button class="secondary" id="bpTokenBtn" onclick="exec('addTokenHygiene')">Add Token Hygiene</button>
             <button class="secondary" id="bpSafetyBtn" onclick="exec('addSafetyGuardrails')">Add Safety Guardrails</button>
             <button class="secondary" id="bpDefenseBtn" onclick="exec('addResponseDefense')">Add Response Defense</button>
-            <button class="secondary" id="bpInjectionBtn" onclick="exec('addPromptInjectionGuardrails')">Add Prompt Injection Guardrails</button>
+            <button class="secondary" id="bpInjectionBtn" onclick="exec('addPromptInjectionGuardrails')">Add Prompt Guardrails</button>
           </div>
           <div id="dictStatus" class="muted" style="margin-top:6px"></div>
           <div id="compressionStatus" class="muted" style="margin-top:6px"></div>
@@ -495,9 +495,9 @@ export class ActionsViewProvider implements vscode.WebviewViewProvider {
             if (ds) {
               if (!isPro) {
                 ds.textContent = 'Dictionary: Free default (built-in)';
-              } else if (fetchedAtMs && rowCount > 0) {
+              } else if (fetchedAtMs) {
                 const dt = new Date(fetchedAtMs);
-                ds.textContent = 'Dictionary: synced ' + dt.toLocaleString() + ' · ' + rowCount + ' entries' + (dictVersion ? (' · v ' + dictVersion) : '');
+                ds.textContent = 'Dictionary: synced ' + dt.toLocaleString() + ' | ' + rowCount + ' entries' + (dictVersion ? (' | v ' + dictVersion) : '');
               } else {
                 ds.textContent = 'Dictionary: not synced yet';
               }

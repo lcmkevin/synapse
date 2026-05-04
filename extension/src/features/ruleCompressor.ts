@@ -384,7 +384,7 @@ export class RuleCompressor {
     if (!force && existing && typeof existing.fetchedAtMs === "number" && Date.now() - existing.fetchedAtMs < CACHE_TTL_MS) return;
 
     const licenseKey = await this.loadSavedLicenseKey();
-    if (!licenseKey) return;
+    if (!licenseKey) throw new Error('No license key saved. Use "Synapse: Enter License Key" first.');
 
     const base = this.getApiBaseUrl();
     const instanceId = vscode.env.machineId || "unknown";
