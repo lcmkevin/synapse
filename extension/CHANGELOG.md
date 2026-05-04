@@ -14,6 +14,7 @@
 - Pro checkout requests now send `plan: "pro_lifetime"` (no client Stripe Price IDs).
 - Pro messaging updated to “one-time payment • no recurring fees”.
 - Control Center: auto-refresh token totals when rules change.
+- Rule Compressor: Unicode-safe preprocessing (NFC normalization + smart quote normalization + Unicode-aware regexes).
 
 ## [0.1.1] - 2026-04-21
 

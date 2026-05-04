@@ -6,6 +6,7 @@
 - Website: adapters downloads page now includes a default index and stub adapter JSONs.
 - License/Pro: added license-gated dictionary sync + optional compression metrics upload endpoints.
 - Extension: Control Center shows dictionary sync status and refreshes cost totals on rule changes.
+- Pro: Rule Compressor is Unicode-safe (NFC normalization + smart quote normalization + Unicode-aware regexes).
 
 ## [0.1.1] - 2026-04-21
 
