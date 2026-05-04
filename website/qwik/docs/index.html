@@ -255,14 +255,12 @@ synapse backup restore --backup backup_2026-04-22T...</code></pre>
 
             <h2 id="compression-demo">Compression Demo</h2>
             <p>Synapse can compress verbose workspace rules into shorter text while preserving code blocks. Free includes a conservative built-in dictionary; Pro can sync an expanded dictionary.</p>
-            <p>To test with a synthetic rule (safe to share), add <code>.synapse/rules/compression-test.synapse</code> and run:</p>
-            <pre><code>synapse analyze
-
-# VS Code → Synapse → Control Center → Rule Improvements
-# Scan Compression → Compress Workspace
-
-synapse analyze</code></pre>
-            <p>If you want to publish results, share token totals and % savings rather than full before/after diffs (to avoid revealing your dictionary and heuristics).</p>
+            <p>Try it on your own rules:</p>
+            <pre><code># VS Code → Synapse → Control Center → Rule Improvements
+# Scan Compression → Compress Workspace</code></pre>
+            <p>Measure before/after:</p>
+            <pre><code>synapse analyze</code></pre>
+            <p>Tip: start with rule sets that include longer “always-on” instructions for the biggest savings.</p>
 
             <h2 id="dashboard">Control Center</h2>
             <p>Synapse exposes a single sidebar UI called <strong>Control Center</strong> to reduce clicks and keep actions + cost + improvements in one place.</p>
