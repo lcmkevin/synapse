@@ -46,6 +46,7 @@
                     <li>Support communications: emails you send to us and any information you include.</li>
                     <li>Product data (local by default): your `.synapse/` rules live in your project and are not uploaded unless you configure a service that does so.</li>
                     <li>Payments (Stripe): if you purchase Pro, we collect your email and limited purchase metadata (e.g., checkout/session id, price id, purchase status) to deliver and manage your license.</li>
+                    <li>Licensing records: for Pro purchases we store your email, license key, plan, status, and related purchase identifiers in our backend database (hosted on Supabase).</li>
                 </ul>
 
                 <h3 style="margin-top: 1.5rem;">Payments (Stripe)</h3>
@@ -63,6 +64,17 @@
                     We do not use purchase emails for marketing or profiling unless you explicitly opt in.
                 </p>
 
+                <h3 style="margin-top: 1.5rem;">Service Providers</h3>
+                <p style="color: var(--muted); margin-top: 0.75rem;">
+                    We use trusted third-party service providers to operate the product. These providers process data on our behalf for the purposes described in this policy:
+                </p>
+                <ul class="pricing-features">
+                    <li>Stripe: payment processing.</li>
+                    <li>Supabase: database hosting for licensing records (email + license key + status).</li>
+                    <li>Hosting provider: to run the website and APIs.</li>
+                    <li>Email delivery: to send license keys and support responses (when configured).</li>
+                </ul>
+
                 <h3 style="margin-top: 1.5rem;">How We Use Data</h3>
                 <ul class="pricing-features">
                     <li>Operate and improve the website and product.</li>
@@ -70,6 +82,21 @@
                     <li>Enforce licensing and prevent abuse (for Pro features).</li>
                     <li>Process payments and deliver licenses (via Stripe) when you purchase Pro.</li>
                 </ul>
+
+                <h3 style="margin-top: 1.5rem;">Optional Telemetry</h3>
+                <p style="color: var(--muted); margin-top: 0.75rem;">
+                    Some features can collect optional usage telemetry (for example, token totals and token deltas from compression). Telemetry is off by default, and you can disable it at any time. We do not intentionally collect your rule text as telemetry.
+                </p>
+
+                <h3 style="margin-top: 1.5rem;">Security</h3>
+                <p style="color: var(--muted); margin-top: 0.75rem;">
+                    We use reasonable administrative, technical, and organizational measures designed to protect your data. Payments are processed by Stripe; we do not store your full payment card details. No method of transmission or storage is 100% secure, and we cannot guarantee absolute security.
+                </p>
+
+                <h3 style="margin-top: 1.5rem;">Data Retention</h3>
+                <p style="color: var(--muted); margin-top: 0.75rem;">
+                    We retain licensing and transaction-related records as needed to provide Pro access, prevent abuse, and comply with legal/accounting obligations. You can request deletion of your account-related data, subject to required retention.
+                </p>
 
                 <h3 style="margin-top: 1.5rem;">Your Choices</h3>
                 <ul class="pricing-features">
