@@ -10,7 +10,10 @@ export class ActionsViewProvider implements vscode.WebviewViewProvider {
   private rulesWatcher: vscode.FileSystemWatcher | null = null;
   private refreshTimer: NodeJS.Timeout | null = null;
 
-  constructor(private readonly extensionUri: vscode.Uri) {
+  constructor(
+    private readonly extensionUri: vscode.Uri,
+    private readonly context: vscode.ExtensionContext
+  ) {
     this.tokenCounter = new TokenCounter();
   }
 
@@ -21,6 +24,10 @@ export class ActionsViewProvider implements vscode.WebviewViewProvider {
     } catch {
       void 0;
     }
+  }
+
+  async refresh(): Promise<void> {
+    await this.sendAll();
   }
 
   resolveWebviewView(
@@ -203,6 +210,13 @@ export class ActionsViewProvider implements vscode.WebviewViewProvider {
             ? exported.isProUser
             : false;
 
+      const cached = this.context.globalState.get<any>("synapse.ruleCompressor.dictionary.v1");
+      const fetchedAtMs = typeof cached?.fetchedAtMs === "number" ? cached.fetchedAtMs : null;
+      const rows = Array.isArray(cached?.rows) ? cached.rows : [];
+      const head = rows[0] && typeof rows[0] === "object" ? rows[0] : null;
+      const headCreatedAt = head && typeof (head as any).created_at === "string" ? (head as any).created_at : null;
+      const dictVersion = rows.length ? `${rows.length}:${headCreatedAt || "none"}` : null;
+
       const topRules = [...analysis.breakdown].sort((a, b) => b.tokens - a.tokens).slice(0, 3);
       void this.view?.webview.postMessage({
         command: "updateCost",
@@ -213,6 +227,11 @@ export class ActionsViewProvider implements vscode.WebviewViewProvider {
           topRules,
           recommendations: analysis.recommendations,
           isPro,
+          dictionary: {
+            fetchedAtMs,
+            rowCount: rows.length,
+            dictVersion,
+          },
         },
       });
     } catch {
@@ -346,6 +365,7 @@ export class ActionsViewProvider implements vscode.WebviewViewProvider {
             <button class="secondary" id="bpSafetyBtn" onclick="exec('addSafetyGuardrails')">Add Safety Guardrails</button>
             <button class="secondary" id="bpDefenseBtn" onclick="exec('addResponseDefense')">Add Response Defense</button>
           </div>
+          <div id="dictStatus" class="muted" style="margin-top:6px"></div>
           <div id="compressionStatus" class="muted" style="margin-top:6px"></div>
         </div>
       </div>
@@ -439,6 +459,10 @@ export class ActionsViewProvider implements vscode.WebviewViewProvider {
             const ruleCount = typeof d.ruleCount === 'number' ? d.ruleCount : 0;
             const top = Array.isArray(d.topRules) ? d.topRules : [];
             const recs = Array.isArray(d.recommendations) ? d.recommendations : [];
+            const dict = d.dictionary || {};
+            const fetchedAtMs = typeof dict.fetchedAtMs === 'number' ? dict.fetchedAtMs : null;
+            const rowCount = typeof dict.rowCount === 'number' ? dict.rowCount : 0;
+            const dictVersion = typeof dict.dictVersion === 'string' ? dict.dictVersion : '';
 
             const summary = document.getElementById('costSummary');
             const details = document.getElementById('costDetails');
@@ -453,6 +477,18 @@ export class ActionsViewProvider implements vscode.WebviewViewProvider {
                 ? ('<div style="margin-top:8px"><strong>Recommendations</strong><ul>' + recs.map(r => '<li>' + r + '</li>').join('') + '</ul></div>')
                 : '<div style="margin-top:8px">No recommendations.</div>';
               details.innerHTML = topHtml + recHtml;
+            }
+
+            const ds = document.getElementById('dictStatus');
+            if (ds) {
+              if (!isPro) {
+                ds.textContent = 'Dictionary: Free default (built-in)';
+              } else if (fetchedAtMs && rowCount > 0) {
+                const dt = new Date(fetchedAtMs);
+                ds.textContent = 'Dictionary: synced ' + dt.toLocaleString() + ' · ' + rowCount + ' entries' + (dictVersion ? (' · v ' + dictVersion) : '');
+              } else {
+                ds.textContent = 'Dictionary: not synced yet';
+              }
             }
             return;
           }

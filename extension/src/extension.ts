@@ -1207,7 +1207,7 @@ Use meaningful variable names
     },
   });
 
-  const actionsProvider = new ActionsViewProvider(context.extensionUri);
+  const actionsProvider = new ActionsViewProvider(context.extensionUri, context);
 
   const syncDictionaryCommand = vscode.commands.registerCommand(
     "synapse.ruleCompressor.syncDictionary",
@@ -1221,6 +1221,7 @@ Use meaningful variable names
         return;
       }
       await compressor.fetchLatestDictionary(true);
+      await actionsProvider.refresh().catch(() => void 0);
       vscode.window.showInformationMessage("✅ Rule Compressor dictionary updated.");
     })
   );

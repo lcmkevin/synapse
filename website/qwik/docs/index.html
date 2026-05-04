@@ -137,9 +137,18 @@ npm install -g synapse-cli
 node .\bin\synapse-unified.js --help</code></pre>
             
             <h2 id="quick-start">Quick Start</h2>
+            <p>Typical workflow after opening a project:</p>
+            <pre><code># If you already have rules in an IDE folder (Cursor/Trae/Windsurf/Cline/Zed)
+Command Palette → Synapse: Import Rules from IDE
+
+# If you do not have rules yet
+Command Palette → Synapse: Initialize Project
+
+# Then compile Synapse rules into IDE outputs
+Command Palette → Synapse: Sync Rules</code></pre>
+            <p>CLI equivalent:</p>
             <pre><code>synapse init
-echo '# Rule: My First Rule\nAlways use TypeScript' > .synapse/rules/my-rule.synapse
-synapse sync --all</code></pre>
+synapse sync --all --conflict prompt</code></pre>
             
             <h2 id="format">Synapse Rule Format</h2>
             <pre><code># Rule: Rule Name
@@ -162,6 +171,10 @@ Command Palette → Synapse: Analyze Tokens
 Command Palette → Synapse: Backup
 Command Palette → Synapse: Detect Conflicts
 Command Palette → Synapse: Optimize Rules (Local)</code></pre>
+            <p>Once rules exist in <code>.synapse/rules/</code>, you can also:</p>
+            <pre><code>- Compress Workspace / Compress Current File
+- Convert to Skills (Pro) for rarely-needed long content
+- Apply Best Practices to add missing safety / token hygiene / response defense rules</code></pre>
             <p>Optimize/Detect runs the CLI in the background and streams logs to the <strong>Synapse</strong> Output panel (no visible terminal).</p>
 
             <h2 id="cli">CLI</h2>
