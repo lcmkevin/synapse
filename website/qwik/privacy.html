@@ -46,7 +46,7 @@
                     <li>Support communications: emails you send to us and any information you include.</li>
                     <li>Product data (local by default): your `.synapse/` rules live in your project and are not uploaded unless you configure a service that does so.</li>
                     <li>Payments (Stripe): if you purchase Pro, we collect your email and limited purchase metadata (e.g., checkout/session id, price id, purchase status) to deliver and manage your license.</li>
-                    <li>Licensing records: for Pro purchases we store your email, license key, plan, status, and related purchase identifiers in our backend database (hosted on Supabase).</li>
+                    <li>Licensing records: for Pro purchases we store your email, license key, plan, status, and related purchase identifiers in our backend database (hosted by a database service provider).</li>
                 </ul>
 
                 <h3 style="margin-top: 1.5rem;">Payments (Stripe)</h3>
@@ -66,13 +66,13 @@
 
                 <h3 style="margin-top: 1.5rem;">Service Providers</h3>
                 <p style="color: var(--muted); margin-top: 0.75rem;">
-                    We use trusted third-party service providers to operate the product. These providers process data on our behalf for the purposes described in this policy:
+                    We use third-party service providers to operate the product. These providers process data on our behalf for the purposes described in this policy:
                 </p>
                 <ul class="pricing-features">
-                    <li>Stripe: payment processing.</li>
-                    <li>Supabase: database hosting for licensing records (email + license key + status).</li>
+                    <li>Payment processor (Stripe): payment processing.</li>
+                    <li>Database service provider: licensing records (email + license key + status).</li>
                     <li>Hosting provider: to run the website and APIs.</li>
-                    <li>Email delivery: to send license keys and support responses (when configured).</li>
+                    <li>Email delivery provider: to send license keys and support responses (when configured).</li>
                 </ul>
 
                 <h3 style="margin-top: 1.5rem;">How We Use Data</h3>
@@ -118,8 +118,29 @@
     </section>
 
     <footer class="footer">
+        <div class="footer-content">
+            <div class="footer-section">
+                <h4>Synapse</h4>
+                <a href="index.html#features">Features</a>
+                <a href="index.html#pricing">Pricing</a>
+                <a href="docs/">Docs</a>
+                <a href="downloads/adapters/">Adapters</a>
+                <a href="changelog/">Changelog</a>
+                <a href="pro/">Pro ($9)</a>
+            </div>
+            <div class="footer-section">
+                <h4>Community</h4>
+                <a href="https://github.com/lcmkevin/synapse" target="_blank" rel="noreferrer">GitHub</a>
+            </div>
+            <div class="footer-section">
+                <h4>Legal</h4>
+                <a href="privacy.html">Privacy</a>
+                <a href="terms.html">Terms</a>
+                <a href="security.html">Security</a>
+            </div>
+        </div>
         <div class="footer-bottom">
-            <p>© 2026 Labs Synapse</p>
+            <p>© 2026 Labs Synapse. Built for developers who switch IDEs.</p>
         </div>
     </footer>
 
