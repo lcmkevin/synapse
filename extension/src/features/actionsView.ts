@@ -204,6 +204,7 @@ export class ActionsViewProvider implements vscode.WebviewViewProvider {
 
       const analysis = this.tokenCounter.analyzeRules(rules, "gpt-4o");
       const ext =
+        vscode.extensions.getExtension("labs-synapse.synapse-rules-official") ||
         vscode.extensions.getExtension("labs-synapse.synapse-rules") ||
         vscode.extensions.getExtension("labs-synapse.synapse") ||
         vscode.extensions.getExtension("lcmkevin.synapse");

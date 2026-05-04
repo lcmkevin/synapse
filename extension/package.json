@@ -1,6 +1,6 @@
 {
-  "name": "synapse-rules",
-  "displayName": "Synapse Rules",
+  "name": "synapse-rules-official",
+  "displayName": "Synapse Rules (Labs Synapse)",
   "description": "Portable AI rules across IDEs with safe sync, token cost analysis, and zero lock-in",
   "version": "0.1.5",
   "publisher": "labs-synapse",

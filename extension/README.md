@@ -2,9 +2,9 @@
 
 One rulebase. Any IDE. Forever.
 
-[![Marketplace Version](https://img.shields.io/visual-studio-marketplace/v/labs-synapse.synapse-rules)](https://marketplace.visualstudio.com/items?itemName=labs-synapse.synapse-rules)
-[![Installs](https://img.shields.io/visual-studio-marketplace/i/labs-synapse.synapse-rules)](https://marketplace.visualstudio.com/items?itemName=labs-synapse.synapse-rules)
-[![Rating](https://img.shields.io/visual-studio-marketplace/r/labs-synapse.synapse-rules)](https://marketplace.visualstudio.com/items?itemName=labs-synapse.synapse-rules)
+[![Marketplace Version](https://img.shields.io/visual-studio-marketplace/v/labs-synapse.synapse-rules-official)](https://marketplace.visualstudio.com/items?itemName=labs-synapse.synapse-rules-official)
+[![Installs](https://img.shields.io/visual-studio-marketplace/i/labs-synapse.synapse-rules-official)](https://marketplace.visualstudio.com/items?itemName=labs-synapse.synapse-rules-official)
+[![Rating](https://img.shields.io/visual-studio-marketplace/r/labs-synapse.synapse-rules-official)](https://marketplace.visualstudio.com/items?itemName=labs-synapse.synapse-rules-official)
 
 ## Write Rules Once. Use Everywhere.
 
