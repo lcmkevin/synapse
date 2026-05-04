@@ -42,7 +42,9 @@ export class CostDashboardProvider implements vscode.WebviewViewProvider {
 
       const analysis = this.tokenCounter.analyzeRules(rules, "gpt-4o");
       const ext =
-        vscode.extensions.getExtension("labs-synapse.synapse") || vscode.extensions.getExtension("lcmkevin.synapse");
+        vscode.extensions.getExtension("labs-synapse.synapse-rules") ||
+        vscode.extensions.getExtension("labs-synapse.synapse") ||
+        vscode.extensions.getExtension("lcmkevin.synapse");
       const exported = ext && ext.isActive ? ext.exports : undefined;
       const isPro =
         typeof exported?.isProUser === "function"

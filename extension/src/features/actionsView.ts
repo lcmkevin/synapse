@@ -96,6 +96,9 @@ export class ActionsViewProvider implements vscode.WebviewViewProvider {
         case "addResponseDefense":
           await vscode.commands.executeCommand("synapse.bestPractices.addResponseDefense");
           break;
+        case "addPromptInjectionGuardrails":
+          await vscode.commands.executeCommand("synapse.bestPractices.addPromptInjectionGuardrails");
+          break;
         case "syncDictionary":
           await vscode.commands.executeCommand("synapse.ruleCompressor.syncDictionary");
           break;
@@ -201,7 +204,9 @@ export class ActionsViewProvider implements vscode.WebviewViewProvider {
 
       const analysis = this.tokenCounter.analyzeRules(rules, "gpt-4o");
       const ext =
-        vscode.extensions.getExtension("labs-synapse.synapse") || vscode.extensions.getExtension("lcmkevin.synapse");
+        vscode.extensions.getExtension("labs-synapse.synapse-rules") ||
+        vscode.extensions.getExtension("labs-synapse.synapse") ||
+        vscode.extensions.getExtension("lcmkevin.synapse");
       const exported = ext && ext.isActive ? (ext.exports as any) : undefined;
       const isPro =
         typeof exported?.isProUser === "function"
@@ -273,10 +278,16 @@ export class ActionsViewProvider implements vscode.WebviewViewProvider {
         allTextLower.includes("short-hand grammar") ||
         allTextLower.includes("valid standard code only")
       );
+    const missingInjection =
+      !(
+        allTextLower.includes("prompt injection") ||
+        (allTextLower.includes("untrusted") && allTextLower.includes("as data")) ||
+        (allTextLower.includes("never reveal secrets") && allTextLower.includes("environment"))
+      );
 
     void this.view?.webview.postMessage({
       command: "updateBestPractices",
-      data: { missingTokenHygiene, missingSafety, missingDefense },
+      data: { missingTokenHygiene, missingSafety, missingDefense, missingInjection },
     });
   }
 
@@ -364,6 +375,7 @@ export class ActionsViewProvider implements vscode.WebviewViewProvider {
             <button class="secondary" id="bpTokenBtn" onclick="exec('addTokenHygiene')">Add Token Hygiene</button>
             <button class="secondary" id="bpSafetyBtn" onclick="exec('addSafetyGuardrails')">Add Safety Guardrails</button>
             <button class="secondary" id="bpDefenseBtn" onclick="exec('addResponseDefense')">Add Response Defense</button>
+            <button class="secondary" id="bpInjectionBtn" onclick="exec('addPromptInjectionGuardrails')">Add Prompt Injection Guardrails</button>
           </div>
           <div id="dictStatus" class="muted" style="margin-top:6px"></div>
           <div id="compressionStatus" class="muted" style="margin-top:6px"></div>
@@ -498,6 +510,7 @@ export class ActionsViewProvider implements vscode.WebviewViewProvider {
             if (d.missingTokenHygiene) missing.push('Token hygiene');
             if (d.missingSafety) missing.push('Safety guardrails');
             if (d.missingDefense) missing.push('Response defense');
+            if (d.missingInjection) missing.push('Prompt injection guardrails');
             const el = document.getElementById('bestPracticesStatus');
             if (el) el.textContent = missing.length ? ('Missing: ' + missing.join(', ')) : 'Best practices: OK';
 
@@ -505,10 +518,12 @@ export class ActionsViewProvider implements vscode.WebviewViewProvider {
             const tokenBtn = document.getElementById('bpTokenBtn');
             const safetyBtn = document.getElementById('bpSafetyBtn');
             const defenseBtn = document.getElementById('bpDefenseBtn');
+            const injectionBtn = document.getElementById('bpInjectionBtn');
             if (tokenBtn) tokenBtn.style.display = d.missingTokenHygiene ? '' : 'none';
             if (safetyBtn) safetyBtn.style.display = d.missingSafety ? '' : 'none';
             if (defenseBtn) defenseBtn.style.display = d.missingDefense ? '' : 'none';
-            const anyMissing = !!(d.missingTokenHygiene || d.missingSafety || d.missingDefense);
+            if (injectionBtn) injectionBtn.style.display = d.missingInjection ? '' : 'none';
+            const anyMissing = !!(d.missingTokenHygiene || d.missingSafety || d.missingDefense || d.missingInjection);
             if (actions) actions.style.display = anyMissing ? '' : 'none';
             return;
           }
