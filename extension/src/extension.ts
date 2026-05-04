@@ -398,7 +398,7 @@ async function loadRuleCompressor(context: vscode.ExtensionContext): Promise<Rul
   } catch {
     void 0;
   }
-  return new FreeRuleCompressor();
+  return new FreeRuleCompressor(context);
 }
 
 export async function activate(context: vscode.ExtensionContext) {

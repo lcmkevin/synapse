@@ -1,4 +1,9 @@
 import { encoding_for_model, get_encoding } from "tiktoken";
+import * as fs from "fs/promises";
+import * as http from "http";
+import * as https from "https";
+import * as os from "os";
+import * as path from "path";
 import * as vscode from "vscode";
 
 export type CompressionResult = {
@@ -10,6 +15,16 @@ export type CompressionResult = {
 };
 
 type ReplacementPair = { id?: string; find: string; replace: string };
+type DictionaryCategory = "defluffer" | "symbolization";
+type SynapseDictionaryRow = {
+  id?: string;
+  category: DictionaryCategory | string;
+  find_pattern: string;
+  replace_with: string;
+  created_at?: string;
+};
+
+type CachedDictionary = { fetchedAtMs: number; rows: SynapseDictionaryRow[] };
 
 type CompiledUnion = {
   regex: RegExp | null;
@@ -18,6 +33,9 @@ type CompiledUnion = {
 };
 
 type CodeStub = { placeholder: string; content: string };
+
+const CACHE_KEY = "synapse.ruleCompressor.dictionary.v1";
+const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 
 function escapeRegexLiteral(text: string): string {
   return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -63,6 +81,79 @@ function restoreMarkdownCode(text: string, stubs: CodeStub[]): string {
     out = out.split(s.placeholder).join(s.content);
   }
   return out;
+}
+
+function ensureRegexFlags(flags: string, required: string): string {
+  const raw = String(flags || "");
+  let out = raw;
+  for (const ch of String(required || "")) {
+    if (!out.includes(ch)) out += ch;
+  }
+  return out;
+}
+
+function parseRegexPattern(pattern: string): RegExp | null {
+  const raw = String(pattern || "").trim();
+  if (!raw) return null;
+
+  if (raw.startsWith("/") && raw.lastIndexOf("/") > 0) {
+    const lastSlash = raw.lastIndexOf("/");
+    const body = raw.slice(1, lastSlash);
+    const flags = raw.slice(lastSlash + 1);
+    try {
+      return new RegExp(body, ensureRegexFlags(flags || "g", "u"));
+    } catch {
+      return null;
+    }
+  }
+
+  try {
+    return new RegExp(raw, "giu");
+  } catch {
+    return null;
+  }
+}
+
+function requestJson(method: "GET" | "POST", urlString: string, body?: unknown): Promise<{ status: number; json: any }> {
+  return new Promise((resolve, reject) => {
+    const url = new URL(urlString);
+    const lib = url.protocol === "http:" ? http : https;
+    const payload = body === undefined ? "" : JSON.stringify(body ?? {});
+    const req = lib.request(
+      {
+        protocol: url.protocol,
+        hostname: url.hostname,
+        port: url.port,
+        path: url.pathname + url.search,
+        method,
+        headers: {
+          Accept: "application/json",
+          ...(payload
+            ? {
+                "Content-Type": "application/json",
+                "Content-Length": Buffer.byteLength(payload),
+              }
+            : {}),
+        },
+      },
+      (res) => {
+        let data = "";
+        res.on("data", (chunk) => (data += chunk.toString()));
+        res.on("end", () => {
+          const status = res.statusCode || 0;
+          if (!data) return resolve({ status, json: null });
+          try {
+            resolve({ status, json: JSON.parse(data) });
+          } catch {
+            resolve({ status, json: null });
+          }
+        });
+      }
+    );
+    req.on("error", reject);
+    if (payload) req.write(payload);
+    req.end();
+  });
 }
 
 const VERB_STEMS = new Set<string>([
@@ -264,18 +355,67 @@ export class RuleCompressor {
   private static encoder: any | null = null;
   private static compiledFree: CompiledUnion | null = null;
 
-  async fetchLatestDictionary(): Promise<void> {
-    return;
+  private proDefluffer: CompiledUnion | null = null;
+  private proSymbolization: Array<{ id?: string; regex: RegExp; replaceWith: string }> = [];
+
+  constructor(private readonly context?: vscode.ExtensionContext) {
+    try {
+      const cached = this.context?.globalState?.get<CachedDictionary>(CACHE_KEY);
+      if (cached && Array.isArray(cached.rows)) this.compileProRules(cached.rows);
+    } catch {
+      void 0;
+    }
   }
 
-  async applyCompression(text: string, _isPro: boolean): Promise<CompressionResult> {
-    const raw = String(text || "");
+  sanitizeEncoding(text: string): string {
+    let out = String(text || "");
+    try {
+      out = out.normalize("NFC");
+    } catch {
+      void 0;
+    }
+    out = out.replace(/[“”]/gu, "\"").replace(/[‘’]/gu, "'");
+    return out;
+  }
+
+  async fetchLatestDictionary(force: boolean = false): Promise<void> {
+    if (!this.context) return;
+    const existing = this.context.globalState.get<CachedDictionary>(CACHE_KEY);
+    if (!force && existing && typeof existing.fetchedAtMs === "number" && Date.now() - existing.fetchedAtMs < CACHE_TTL_MS) return;
+
+    const licenseKey = await this.loadSavedLicenseKey();
+    if (!licenseKey) return;
+
+    const base = this.getApiBaseUrl();
+    const instanceId = vscode.env.machineId || "unknown";
+    const { status, json } = await requestJson("POST", `${base}/api/dictionary`, { licenseKey, instanceId });
+    if (status !== 200 || !json?.ok || !Array.isArray(json?.rows)) throw new Error("Dictionary sync failed");
+
+    const rows: SynapseDictionaryRow[] = json.rows
+      .filter((r: any) => r && typeof r === "object")
+      .map((r: any) => ({
+        id: typeof r.id === "string" ? r.id : undefined,
+        category: typeof r.category === "string" ? r.category : "",
+        find_pattern: typeof r.find_pattern === "string" ? r.find_pattern : "",
+        replace_with: typeof r.replace_with === "string" ? r.replace_with : "",
+        created_at: typeof r.created_at === "string" ? r.created_at : undefined,
+      }))
+      .filter((r: SynapseDictionaryRow) => (r.category === "defluffer" || r.category === "symbolization") && r.find_pattern.trim().length > 0);
+
+    const payload: CachedDictionary = { fetchedAtMs: Date.now(), rows };
+    await this.context.globalState.update(CACHE_KEY, payload);
+    this.compileProRules(rows);
+  }
+
+  async applyCompression(text: string, isPro: boolean): Promise<CompressionResult> {
+    const raw = this.sanitizeEncoding(String(text || ""));
     const beforeTokens = this.countTokens(raw);
     const hitCounts: Record<string, number> = {};
 
     const stubbed = stubMarkdownCode(raw);
     let out = normalizeWhitespace(stripFillerOpenings(stubbed.text));
     out = this.applyFree(out, hitCounts);
+    if (isPro) out = this.applyPro(out, hitCounts);
     out = normalizeWhitespace(out);
 
     let afterTokens = this.countTokens(out);
@@ -315,6 +455,87 @@ export class RuleCompressor {
       RuleCompressor.compiledFree = compileFuzzyUnion(RuleCompressor.FREE_DEFAULT_REPLACEMENTS);
     }
     return applyUnion(text, RuleCompressor.compiledFree, hitCounts);
+  }
+
+  private applyPro(text: string, hitCounts?: Record<string, number>): string {
+    let out = text;
+    if (this.proDefluffer) out = applyUnion(out, this.proDefluffer, hitCounts);
+    for (const rule of this.proSymbolization) {
+      try {
+        if (hitCounts && rule.id) {
+          const flags = ensureRegexFlags(rule.regex.flags, "ug");
+          const re = rule.regex.global && rule.regex.unicode ? rule.regex : new RegExp(rule.regex.source, flags);
+          let count = 0;
+          let m: RegExpExecArray | null = null;
+          while ((m = re.exec(out))) {
+            count++;
+            if (m.index === re.lastIndex) re.lastIndex++;
+            if (count > 100000) break;
+          }
+          if (count > 0) hitCounts[rule.id] = (hitCounts[rule.id] || 0) + count;
+        }
+        const safeRule = rule.regex.unicode ? rule.regex : new RegExp(rule.regex.source, ensureRegexFlags(rule.regex.flags, "u"));
+        out = out.replace(safeRule, rule.replaceWith);
+      } catch {
+        void 0;
+      }
+    }
+    return out;
+  }
+
+  private compileProRules(rows: SynapseDictionaryRow[]) {
+    const deflufferPairs: ReplacementPair[] = [];
+    const symbolRules: Array<{ id?: string; regex: RegExp; replaceWith: string }> = [];
+    for (const r of rows) {
+      if (r.category === "defluffer") {
+        deflufferPairs.push({ id: r.id, find: r.find_pattern, replace: r.replace_with });
+      } else if (r.category === "symbolization") {
+        const re = parseRegexPattern(r.find_pattern);
+        if (re) symbolRules.push({ id: r.id, regex: re, replaceWith: r.replace_with });
+      }
+    }
+    this.proDefluffer = deflufferPairs.length > 0 ? compileFuzzyUnion(deflufferPairs) : null;
+    this.proSymbolization = symbolRules;
+  }
+
+  private getApiBaseUrl(): string {
+    const configured = vscode.workspace.getConfiguration("synapse").get("licenseApiUrl");
+    const env = process.env.SYNAPSE_LICENSE_API_URL;
+    const base = typeof configured === "string" && configured.trim() ? configured.trim() : env;
+    const raw = base && base.trim() ? base.trim() : "https://www.labs-synapse.com";
+    const trimmed = raw.replace(/\/+$/, "");
+    if (/^https?:\/\/labs-synapse\.com$/i.test(trimmed)) return trimmed.replace(/\/\/labs-synapse\.com$/i, "//www.labs-synapse.com");
+    return trimmed;
+  }
+
+  private getCliLicenseKeyPath(): string {
+    return path.join(os.homedir(), ".synapse", "license.key");
+  }
+
+  private async loadCliLicenseKey(): Promise<string> {
+    const p = this.getCliLicenseKeyPath();
+    try {
+      const text = await fs.readFile(p, "utf8");
+      return String(text || "").trim();
+    } catch {
+      return "";
+    }
+  }
+
+  private async loadSavedLicenseKey(): Promise<string> {
+    if (!this.context) return "";
+    if (process.env.SYNAPSE_DEV === "true") return "";
+    try {
+      const fromSecret = await this.context.secrets.get("synapse.licenseKey.v1");
+      const secretKey = typeof fromSecret === "string" ? fromSecret.trim() : "";
+      if (secretKey) return secretKey;
+    } catch {
+      void 0;
+    }
+    const fromState = this.context.globalState.get("licenseKey");
+    const stateKey = typeof fromState === "string" ? fromState.trim() : "";
+    if (stateKey) return stateKey;
+    return await this.loadCliLicenseKey();
   }
 
   private async compressWithNativeLM(text: string): Promise<string | null> {
