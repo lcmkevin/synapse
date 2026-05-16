@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.1.3] - 2026-05-16
+## [0.1.6] - 2026-05-16
 
 - Extension: Optimizer/Detect now runs built-in local logic (no external `synapse` executable required).
 - Extension: Control Center shows Init when not initialized and hides Best Practices UI once satisfied.
