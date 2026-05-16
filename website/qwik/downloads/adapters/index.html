@@ -120,14 +120,29 @@
       <div class="panel" style="margin-top: 2rem">
         <h2 style="margin-bottom: 0.5rem">Available adapters</h2>
         <p class="muted" style="margin-bottom: 1rem">Downloads come from <code>/downloads/adapters/index.json</code>.</p>
+        <div class="note" style="margin-bottom: 1rem">
+          Default adapter placeholders. Install Synapse CLI and run: <code>synapse adapters update &lt;id&gt;</code> (Pro auto-updates; Free uses manual download).
+        </div>
         <div id="status" class="note">Loading adapters…</div>
-        <div id="grid" class="downloads-grid" style="margin-top: 1rem"></div>
+        <div class="comparison-wrapper" style="margin-top: 1rem">
+          <table>
+            <thead>
+              <tr>
+                <th>Adapter</th>
+                <th>Version</th>
+                <th>Install path</th>
+                <th>Download</th>
+              </tr>
+            </thead>
+            <tbody id="adapterRows"></tbody>
+          </table>
+        </div>
       </div>
     </section>
 
     <script>
       const statusEl = document.getElementById("status");
-      const gridEl = document.getElementById("grid");
+      const rowsEl = document.getElementById("adapterRows");
 
       function setStatus(msg) {
         if (!statusEl) return;
@@ -143,29 +158,23 @@
           .replace(/'/g, "&#039;");
       }
 
-      function renderCard(adapter) {
+      function renderRow(adapter) {
         const id = typeof adapter.id === "string" ? adapter.id : "";
         const version = typeof adapter.version === "string" ? adapter.version : "";
-        const releaseNotes = typeof adapter.releaseNotes === "string" ? adapter.releaseNotes : "";
         const downloadUrl = typeof adapter.downloadUrl === "string" ? adapter.downloadUrl : "";
         if (!id || !downloadUrl) return "";
 
-        const notes = releaseNotes ? `<div class="note" style="margin-top:0.75rem">${escapeHtml(releaseNotes)}</div>` : "";
-
+        const installPath = `~/.synapse/adapters/${id}.json`;
         return `
-          <div class="download-card">
-            <h3>${escapeHtml(id)}</h3>
-            <div class="download-meta">
-              ${version ? `<span class="tag">v${escapeHtml(version)}</span>` : ""}
-              <span class="tag">JSON</span>
-            </div>
-            <div class="muted">Install: <code>~/.synapse/adapters/${escapeHtml(id)}.json</code></div>
-            ${notes}
-            <div style="margin-top:1rem; display:flex; gap:0.75rem; flex-wrap:wrap">
+          <tr>
+            <td>${escapeHtml(id)}</td>
+            <td>${version ? `v${escapeHtml(version)}` : "—"}</td>
+            <td><code>${escapeHtml(installPath)}</code></td>
+            <td style="white-space: nowrap">
               <a class="btn btn-primary" href="${escapeHtml(downloadUrl)}" download>Download</a>
-              <a class="btn btn-outline" href="../../pro/">Get Pro</a>
-            </div>
-          </div>
+              <a class="btn btn-outline" href="../../pro/" style="margin-left:0.5rem">Get Pro</a>
+            </td>
+          </tr>
         `;
       }
 
@@ -180,7 +189,7 @@
             return;
           }
           setStatus(`Found ${list.length} adapters.`);
-          if (gridEl) gridEl.innerHTML = list.map(renderCard).join("");
+          if (rowsEl) rowsEl.innerHTML = list.map(renderRow).join("");
         } catch {
           const isDev = location.hostname === "localhost" || location.hostname === "127.0.0.1" || location.search.includes("debug=1");
           if (isDev) {
