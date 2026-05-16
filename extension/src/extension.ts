@@ -1535,6 +1535,7 @@ Use meaningful variable names
   const licenseDiagnosticsCommand = vscode.commands.registerCommand("synapse.licenseDiagnostics", safeCommand("License Diagnostics", async () => {
     if (typeof license.runDiagnostics === "function") {
       await license.runDiagnostics();
+      await refreshSidebar();
       return;
     }
     vscode.window.showInformationMessage("License diagnostics not available in this build.");

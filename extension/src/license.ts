@@ -36,8 +36,12 @@ export class LicenseManager {
   }
 
   private getApiBaseUrl(): string {
-    const configured = vscode.workspace.getConfiguration("synapse").get<string>("licenseApiUrl");
-    const base = typeof configured === "string" && configured.trim() ? configured.trim() : DEFAULT_API_BASE_URL;
+    const cfg = vscode.workspace.getConfiguration("synapse");
+    const inspected = cfg.inspect<string>("licenseApiUrl");
+    const globalValue = inspected?.globalValue;
+    const workspaceValue = inspected?.workspaceValue;
+    const pick = (v: unknown): string => (typeof v === "string" && v.trim() ? v.trim() : "");
+    const base = pick(globalValue) || pick(workspaceValue) || DEFAULT_API_BASE_URL;
     const trimmed = base.replace(/\/+$/, "");
     if (/^https?:\/\/labs-synapse\.com$/i.test(trimmed)) return trimmed.replace(/\/\/labs-synapse\.com$/i, "//www.labs-synapse.com");
     return trimmed;
@@ -297,6 +301,10 @@ export class LicenseManager {
       channel.show(true);
 
       if (status === 200 && json?.valid === true) {
+        this.isPro = true;
+        await this.saveSecretLicenseKey(key);
+        await this.context?.globalState.update("licenseKey", key);
+        await this.saveCliLicenseKey(key);
         vscode.window.showInformationMessage("License is valid.");
       } else {
         vscode.window.showWarningMessage(reason ? `License invalid: ${reason}` : "License invalid.");

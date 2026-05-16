@@ -469,11 +469,15 @@ export class ActionsViewProvider implements vscode.WebviewViewProvider {
         </div>
       </div>
 
-      <div class="footer">
-        <div class="row" style="align-items:center; justify-content: space-between;">
-          <div>
+      <div class="section">
+        <div class="section-header" onclick="toggle('licenseBody', 'licenseCaret')">
+          <span>License</span>
+          <span style="display:flex; align-items:center; gap:8px">
             <span class="badge" id="licenseBadge">License: —</span>
-          </div>
+            <span id="licenseCaret">▶</span>
+          </span>
+        </div>
+        <div id="licenseBody" class="section-content collapsed">
           <div class="row">
             <button class="secondary" id="btnUpgrade" onclick="exec('upgradePro')">Upgrade</button>
             <button class="secondary" id="btnEnterKey" onclick="exec('enterLicenseKey')">Enter Key</button>
