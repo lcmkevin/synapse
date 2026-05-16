@@ -350,6 +350,14 @@ export class RuleCompressor {
     { id: "free:044", find: "in addition to", replace: "plus" },
     { id: "free:045", find: "as a result", replace: "so" },
     { id: "free:046", find: "in other words", replace: "i.e." },
+    { id: "free:047", find: "please note that", replace: "note:" },
+    { id: "free:048", find: "please be aware that", replace: "note:" },
+    { id: "free:049", find: "with respect to", replace: "about" },
+    { id: "free:050", find: "in accordance with", replace: "per" },
+    { id: "free:051", find: "as well as", replace: "and" },
+    { id: "free:052", find: "a number of", replace: "several" },
+    { id: "free:053", find: "in relation to", replace: "about" },
+    { id: "free:054", find: "in a timely manner", replace: "promptly" },
   ];
 
   private static encoder: any | null = null;

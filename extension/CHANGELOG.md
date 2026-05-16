@@ -1,20 +1,19 @@
 # Changelog
 
-## [Unreleased]
+## [0.1.6] - 2026-05-16
 
 ### Added
 
-- `synapse.proPriceLabel` and `synapse.proTermsLabel` settings to avoid hard-coded pricing copy.
-- Cleanup/Uninstall flow to remove local Synapse data (home dir, workspace, extension storage).
-- `synapse.compressionMetrics` opt-in setting (off/local/upload) for anonymized compression metrics.
-- Control Center: dictionary sync status (last sync time + entry count).
+- Control Center: Templates Gallery with selectable packs (installs into `.synapse/rules/`, no overwrites).
+- Control Center: Init vs Sync button state based on workspace initialization/rules detection.
+- Init: auto-adds missing best-practice rules to `.synapse/rules/` (never modifies existing IDE rule files).
+- Website: exposed Free dictionary JSON download via `/api/dictionary?public=1&tier=free`.
 
 ### Changed
 
-- Pro checkout requests now send `plan: "pro_lifetime"` (no client Stripe Price IDs).
-- Pro messaging updated to “one-time payment • no recurring fees”.
-- Control Center: auto-refresh token totals when rules change.
-- Rule Compressor: Unicode-safe preprocessing (NFC normalization + smart quote normalization + Unicode-aware regexes).
+- Optimizer/Detect: now runs built-in local optimizer in the extension (no external CLI required).
+- License badge: Pro status is read from the machine-based license manager (consistent across workspaces).
+- Rule Compressor: expanded Free built-in replacement pairs.
 
 ## [0.1.1] - 2026-04-21
 

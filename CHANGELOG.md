@@ -1,12 +1,12 @@
 # Changelog
 
-## [Unreleased]
+## [0.1.3] - 2026-05-16
 
-- Website: updated docs (quick-start workflow, compression section wording).
-- Website: adapters downloads page now includes a default index and stub adapter JSONs.
-- License/Pro: added license-gated dictionary sync + optional compression metrics upload endpoints.
-- Extension: Control Center shows dictionary sync status and refreshes cost totals on rule changes.
-- Pro: Rule Compressor is Unicode-safe (NFC normalization + smart quote normalization + Unicode-aware regexes).
+- Extension: Optimizer/Detect now runs built-in local logic (no external `synapse` executable required).
+- Extension: Control Center shows Init when not initialized and hides Best Practices UI once satisfied.
+- Extension: Templates Gallery (selectable packs) installs optional rules into `.synapse/rules/` without overwriting.
+- Website: Downloads page now includes a public Free dictionary JSON download.
+- Rule Compressor: expanded Free built-in dictionary pairs.
 
 ## [0.1.1] - 2026-04-21
 

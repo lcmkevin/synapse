@@ -2,7 +2,7 @@
   "name": "synapse-rules-official",
   "displayName": "Synapse Rules (Labs Synapse)",
   "description": "Portable AI rules across IDEs with safe sync, token cost analysis, and zero lock-in",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "publisher": "labs-synapse",
   "icon": "icon.png",
   "repository": {
@@ -51,32 +51,6 @@
     "color": "#667eea",
     "theme": "dark"
   },
-  "activationEvents": [
-    "onView:synapseControlCenter",
-    "onCommand:synapse.sync",
-    "onCommand:synapse.init",
-    "onCommand:synapse.analyze",
-    "onCommand:synapse.analyzeTokens",
-    "onCommand:synapse.detect",
-    "onCommand:synapse.convertToSkill",
-    "onCommand:synapse.upgradePro",
-    "onCommand:synapse.enterLicenseKey",
-    "onCommand:synapse.resendLicenseKey",
-    "onCommand:synapse.forgetLicenseKey",
-    "onCommand:synapse.licenseDiagnostics",
-    "onCommand:synapse.target.add",
-    "onCommand:synapse.ws.connect",
-    "onCommand:synapse.ws.disconnect",
-    "onCommand:synapse.importFromIDE",
-    "onCommand:synapse.optimize",
-    "onCommand:synapse.backup",
-    "onCommand:synapse.compressSelection",
-    "onCommand:synapse.ruleCompressor.scanWorkspace",
-    "onCommand:synapse.ruleCompressor.compressWorkspace",
-    "onCommand:synapse.ruleCompressor.syncDictionary",
-    "onCommand:synapse.bestPractices",
-    "onCommand:synapse.cleanup"
-  ],
   "main": "./out/extension.js",
   "contributes": {
     "commands": [
@@ -194,6 +168,16 @@
         "command": "synapse.cleanup",
         "title": "Synapse: Cleanup / Uninstall",
         "category": "Synapse"
+      },
+      {
+        "command": "synapse.templates.install",
+        "title": "Synapse: Install Templates",
+        "category": "Synapse"
+      },
+      {
+        "command": "synapse.templates.catalog",
+        "title": "Synapse: List Templates (Internal)",
+        "category": "Synapse"
       }
     ],
     "viewsContainers": {
@@ -210,7 +194,8 @@
         {
           "id": "synapseControlCenter",
           "name": "Control Center",
-          "type": "webview"
+          "type": "webview",
+          "icon": "media/synapse-butterfly-icon.svg"
         }
       ]
     },

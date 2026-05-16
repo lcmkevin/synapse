@@ -2,6 +2,63 @@ const crypto = require("crypto");
 const http = require("http");
 const https = require("https");
 
+const FREE_DEFAULT_REPLACEMENTS = [
+  { id: "free:001", find: "please ensure that", replace: "ensure" },
+  { id: "free:002", find: "please make sure to", replace: "make sure to" },
+  { id: "free:003", find: "in order to", replace: "to" },
+  { id: "free:004", find: "you should always", replace: "always" },
+  { id: "free:005", find: "you are required to", replace: "must" },
+  { id: "free:006", find: "kindly provide", replace: "provide" },
+  { id: "free:007", find: "based on the information provided", replace: "based on data" },
+  { id: "free:008", find: "in the event that", replace: "if" },
+  { id: "free:009", find: "for the purpose of", replace: "for" },
+  { id: "free:010", find: "with reference to", replace: "about" },
+  { id: "free:011", find: "it is important to note that", replace: "note:" },
+  { id: "free:012", find: "do not under any circumstances", replace: "never" },
+  { id: "free:013", find: "keep in mind that", replace: "remember:" },
+  { id: "free:014", find: "it is highly recommended to", replace: "recommend:" },
+  { id: "free:015", find: "take into consideration", replace: "consider" },
+  { id: "free:016", find: "if and only if", replace: "iff" },
+  { id: "free:017", find: "in case of", replace: "if" },
+  { id: "free:018", find: "despite the fact that", replace: "although" },
+  { id: "free:019", find: "at the end of the day", replace: "finally" },
+  { id: "free:020", find: "as soon as possible", replace: "asap" },
+  { id: "free:021", find: "due to the fact that", replace: "because" },
+  { id: "free:022", find: "by means of", replace: "by" },
+  { id: "free:023", find: "at this point in time", replace: "now" },
+  { id: "free:024", find: "it goes without saying that", replace: "obviously" },
+  { id: "free:025", find: "with the exception of", replace: "except" },
+  { id: "free:026", find: "in close proximity to", replace: "near" },
+  { id: "free:027", find: "make an effort to", replace: "try to" },
+  { id: "free:028", find: "conduct an investigation into", replace: "investigate" },
+  { id: "free:029", find: "has the capability to", replace: "can" },
+  { id: "free:030", find: "is able to", replace: "can" },
+  { id: "free:031", find: "serves to", replace: "does" },
+  { id: "free:032", find: "utilized for", replace: "for" },
+  { id: "free:033", find: "in the near future", replace: "soon" },
+  { id: "free:034", find: "on a regular basis", replace: "regularly" },
+  { id: "free:035", find: "in possession of", replace: "has" },
+  { id: "free:036", find: "be responsible for", replace: "handle" },
+  { id: "free:037", find: "it is clear that", replace: "clearly" },
+  { id: "free:038", find: "it appears that", replace: "apparently" },
+  { id: "free:039", find: "most of the time", replace: "usually" },
+  { id: "free:040", find: "at the same time", replace: "while" },
+  { id: "free:041", find: "for example", replace: "e.g." },
+  { id: "free:042", find: "that is to say", replace: "i.e." },
+  { id: "free:043", find: "with regard to", replace: "about" },
+  { id: "free:044", find: "in addition to", replace: "plus" },
+  { id: "free:045", find: "as a result", replace: "so" },
+  { id: "free:046", find: "in other words", replace: "i.e." },
+  { id: "free:047", find: "please note that", replace: "note:" },
+  { id: "free:048", find: "please be aware that", replace: "note:" },
+  { id: "free:049", find: "with respect to", replace: "about" },
+  { id: "free:050", find: "in accordance with", replace: "per" },
+  { id: "free:051", find: "as well as", replace: "and" },
+  { id: "free:052", find: "a number of", replace: "several" },
+  { id: "free:053", find: "in relation to", replace: "about" },
+  { id: "free:054", find: "in a timely manner", replace: "promptly" },
+];
+
 function getLicenseKeyMaxAgeMs() {
   const raw = process.env.LICENSE_KEY_MAX_AGE_DAYS;
   const days = raw ? Number(raw) : NaN;
@@ -209,6 +266,22 @@ async function fetchDictionaryRows() {
 }
 
 async function dictionary(req, res) {
+  try {
+    const url = new URL(req.url || "", "http://localhost");
+    const isPublic = url.searchParams.get("public") === "1";
+    const tier = (url.searchParams.get("tier") || "").trim().toLowerCase();
+    if (req.method === "GET" && isPublic && (tier === "free" || tier === "")) {
+      return res.status(200).json({
+        ok: true,
+        tier: "free",
+        updatedAt: "2026-05-16",
+        pairs: FREE_DEFAULT_REPLACEMENTS,
+      });
+    }
+  } catch {
+    void 0;
+  }
+
   const LICENSE_SECRET = process.env.LICENSE_SECRET ?? process.env.LICENSE_SALT;
   if (!LICENSE_SECRET) {
     return res.status(500).json({ ok: false, error: "Missing LICENSE_SALT or LICENSE_SECRET" });

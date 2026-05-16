@@ -7,14 +7,17 @@ export class ActionsViewProvider implements vscode.WebviewViewProvider {
   private view?: vscode.WebviewView;
   private lastTelemetry?: { savingsPercent: number; beforeTokens: number; afterTokens: number };
   private tokenCounter: TokenCounter;
+  private getIsProUser: () => boolean;
   private rulesWatcher: vscode.FileSystemWatcher | null = null;
   private refreshTimer: NodeJS.Timeout | null = null;
 
   constructor(
     private readonly extensionUri: vscode.Uri,
-    private readonly context: vscode.ExtensionContext
+    private readonly context: vscode.ExtensionContext,
+    getIsProUser: () => boolean
   ) {
     this.tokenCounter = new TokenCounter();
+    this.getIsProUser = getIsProUser;
   }
 
   postCompressionTelemetry(payload: { savingsPercent: number; beforeTokens: number; afterTokens: number }) {
@@ -57,6 +60,19 @@ export class ActionsViewProvider implements vscode.WebviewViewProvider {
 
     webviewView.webview.onDidReceiveMessage(async (message) => {
       switch (message?.command) {
+        case "init":
+          await vscode.commands.executeCommand("synapse.init");
+          await this.sendAll();
+          break;
+        case "templatesCatalog":
+          await this.sendTemplatesCatalog();
+          break;
+        case "installTemplates":
+          if (Array.isArray(message?.ids) && message.ids.length > 0) {
+            await vscode.commands.executeCommand("synapse.templates.install", message.ids);
+            await this.sendAll();
+          }
+          break;
         case "sync":
           await vscode.commands.executeCommand("synapse.sync");
           break;
@@ -145,7 +161,10 @@ export class ActionsViewProvider implements vscode.WebviewViewProvider {
     const wf = vscode.workspace.workspaceFolders?.[0];
     if (!wf) return;
 
-    const pattern = new vscode.RelativePattern(wf, "{.synapse/rules/*.synapse,.trae/rules/*.{md,mdc,rules,synapse,txt}}");
+    const pattern = new vscode.RelativePattern(
+      wf,
+      "{.synapse/config.json,.synapse/rules/*.synapse,.trae/rules/*.{md,mdc,rules,synapse,txt},.cursor/rules/*.{mdc,md},.windsurf/*.{windsurfrules,txt,md},.clinerules/*.md}"
+    );
     const watcher = vscode.workspace.createFileSystemWatcher(pattern);
     const schedule = () => {
       if (this.refreshTimer) clearTimeout(this.refreshTimer);
@@ -163,9 +182,73 @@ export class ActionsViewProvider implements vscode.WebviewViewProvider {
   }
 
   private async sendAll() {
+    await this.sendWorkspaceState();
     await this.sendRules();
     await this.sendCostSummary();
     await this.sendBestPracticesStatus();
+    await this.sendTemplatesCatalog();
+  }
+
+  private async sendTemplatesCatalog() {
+    try {
+      const catalog = await vscode.commands.executeCommand("synapse.templates.catalog");
+      const list = Array.isArray(catalog) ? catalog : [];
+      void this.view?.webview.postMessage({ command: "updateTemplatesCatalog", data: { templates: list } });
+    } catch {
+      void this.view?.webview.postMessage({ command: "updateTemplatesCatalog", data: { templates: [] } });
+    }
+  }
+
+  private async sendWorkspaceState() {
+    const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+    if (!workspaceRoot) {
+      void this.view?.webview.postMessage({ command: "updateWorkspaceState", data: { hasWorkspace: false } });
+      return;
+    }
+
+    const synapseConfig = path.join(workspaceRoot, ".synapse", "config.json");
+    const synapseRulesDir = path.join(workspaceRoot, ".synapse", "rules");
+    const traeRulesDir = path.join(workspaceRoot, ".trae", "rules");
+    const cursorRulesDir = path.join(workspaceRoot, ".cursor", "rules");
+    const windsurfDir = path.join(workspaceRoot, ".windsurf");
+    const clineRulesPath = path.join(workspaceRoot, ".clinerules");
+
+    const exists = async (p: string): Promise<boolean> => {
+      try {
+        await fs.access(p);
+        return true;
+      } catch {
+        return false;
+      }
+    };
+
+    const listFiles = async (dirPath: string): Promise<string[]> => {
+      try {
+        return await fs.readdir(dirPath);
+      } catch {
+        return [];
+      }
+    };
+
+    const synapseInitialized = await exists(synapseConfig);
+    const synapseRules = (await listFiles(synapseRulesDir)).filter((f) => f.toLowerCase().endsWith(".synapse"));
+
+    const traeRules = (await listFiles(traeRulesDir)).filter((f) => f.toLowerCase().endsWith(".md"));
+    const cursorRules = (await listFiles(cursorRulesDir)).filter((f) => f.toLowerCase().endsWith(".mdc"));
+    const windsurfRules = (await listFiles(windsurfDir)).filter((f) => f.toLowerCase().endsWith(".windsurfrules"));
+    const clineRules = (await listFiles(clineRulesPath)).filter((f) => f.toLowerCase().endsWith(".md"));
+
+    const ideRulesCount = traeRules.length + cursorRules.length + windsurfRules.length + clineRules.length;
+
+    void this.view?.webview.postMessage({
+      command: "updateWorkspaceState",
+      data: {
+        hasWorkspace: true,
+        synapseInitialized,
+        synapseRuleCount: synapseRules.length,
+        ideRuleCount: ideRulesCount,
+      },
+    });
   }
 
   private async sendRules() {
@@ -203,18 +286,7 @@ export class ActionsViewProvider implements vscode.WebviewViewProvider {
       );
 
       const analysis = this.tokenCounter.analyzeRules(rules, "gpt-4o");
-      const ext =
-        vscode.extensions.getExtension("labs-synapse.synapse-rules-official") ||
-        vscode.extensions.getExtension("labs-synapse.synapse-rules") ||
-        vscode.extensions.getExtension("labs-synapse.synapse") ||
-        vscode.extensions.getExtension("lcmkevin.synapse");
-      const exported = ext && ext.isActive ? (ext.exports as any) : undefined;
-      const isPro =
-        typeof exported?.isProUser === "function"
-          ? !!exported.isProUser()
-          : typeof exported?.isProUser === "boolean"
-            ? exported.isProUser
-            : false;
+      const isPro = !!this.getIsProUser();
 
       const cached = this.context.globalState.get<any>("synapse.ruleCompressor.dictionary.v1");
       const fetchedAtMs = typeof cached?.fetchedAtMs === "number" ? cached.fetchedAtMs : null;
@@ -342,13 +414,15 @@ export class ActionsViewProvider implements vscode.WebviewViewProvider {
         <div class="section-header"><span>Quick Actions</span><span class="muted">Always visible</span></div>
         <div class="section-content">
           <div class="row">
-            <button onclick="exec('sync')">Sync</button>
-            <button onclick="exec('analyze')">Analyze</button>
-            <button onclick="exec('optimize')">Optimize</button>
-            <button onclick="exec('backup')">Backup</button>
-            <button class="secondary" onclick="exec('detect')">Detect Conflicts</button>
+            <button id="btnInit" onclick="exec('init')" style="display:none">Init</button>
+            <button id="btnSync" onclick="exec('sync')">Sync</button>
+            <button id="btnAnalyze" onclick="exec('analyze')">Analyze</button>
+            <button id="btnOptimize" onclick="exec('optimize')">Optimize</button>
+            <button id="btnBackup" onclick="exec('backup')">Backup</button>
+            <button id="btnDetect" class="secondary" onclick="exec('detect')">Detect Conflicts</button>
             <button class="secondary" onclick="exec('refresh')">Refresh</button>
           </div>
+          <div id="workspaceHint" class="muted" style="margin-top:8px"></div>
         </div>
       </div>
 
@@ -367,7 +441,7 @@ export class ActionsViewProvider implements vscode.WebviewViewProvider {
             <button onclick="exec('compressWorkspace')">Compress Workspace</button>
             <button onclick="exec('compressSelection')">Compress Current File</button>
             <button id="btnConvertSkills" onclick="exec('convertToSkills')">Convert to Skills</button>
-            <button onclick="exec('applyBestPractices')">Apply Best Practices</button>
+            <button id="btnApplyBestPractices" onclick="exec('applyBestPractices')">Apply Best Practices</button>
             <button class="secondary" onclick="exec('scanCompression')">Scan Compression</button>
             <button class="secondary" id="btnSyncDictionary" onclick="exec('syncDictionary')">Sync Dictionary</button>
           </div>
@@ -380,6 +454,18 @@ export class ActionsViewProvider implements vscode.WebviewViewProvider {
           </div>
           <div id="dictStatus" class="muted" style="margin-top:6px"></div>
           <div id="compressionStatus" class="muted" style="margin-top:6px"></div>
+        </div>
+      </div>
+
+      <div class="section" id="templatesSection">
+        <div class="section-header" onclick="toggle('templatesBody', 'templatesCaret')"><span>Templates Gallery</span><span id="templatesCaret">▼</span></div>
+        <div id="templatesBody" class="section-content">
+          <div class="muted">Install optional rule packs into <code>.synapse/rules/</code>. No overwrites.</div>
+          <div id="templatesList" style="margin-top:10px"></div>
+          <div class="row" style="margin-top:10px">
+            <button id="btnInstallTemplates" onclick="installSelectedTemplates()">Install selected</button>
+          </div>
+          <div id="templatesStatus" class="muted" style="margin-top:8px"></div>
         </div>
       </div>
 
@@ -426,6 +512,90 @@ export class ActionsViewProvider implements vscode.WebviewViewProvider {
 
         window.addEventListener('message', event => {
           const message = event.data;
+          if (message.command === 'updateWorkspaceState') {
+            const d = message.data || {};
+            const hasWorkspace = !!d.hasWorkspace;
+            const synapseInitialized = !!d.synapseInitialized;
+            const synapseRuleCount = typeof d.synapseRuleCount === 'number' ? d.synapseRuleCount : 0;
+            const ideRuleCount = typeof d.ideRuleCount === 'number' ? d.ideRuleCount : 0;
+
+            const btnInit = document.getElementById('btnInit');
+            const btnSync = document.getElementById('btnSync');
+            const btnAnalyze = document.getElementById('btnAnalyze');
+            const btnOptimize = document.getElementById('btnOptimize');
+            const btnBackup = document.getElementById('btnBackup');
+            const btnDetect = document.getElementById('btnDetect');
+            const hint = document.getElementById('workspaceHint');
+
+            const showInit = hasWorkspace && !synapseInitialized;
+            if (btnInit) btnInit.style.display = showInit ? '' : 'none';
+            if (btnSync) btnSync.style.display = showInit ? 'none' : '';
+            if (btnAnalyze) btnAnalyze.style.display = showInit ? 'none' : '';
+            if (btnOptimize) btnOptimize.style.display = showInit ? 'none' : '';
+            if (btnBackup) btnBackup.style.display = showInit ? 'none' : '';
+            if (btnDetect) btnDetect.style.display = showInit ? 'none' : '';
+
+            const templatesSection = document.getElementById('templatesSection');
+            if (templatesSection) templatesSection.style.display = showInit ? 'none' : '';
+
+            if (hint) {
+              if (!hasWorkspace) hint.textContent = 'Open a workspace folder to use Synapse.';
+              else if (showInit) {
+                const extra = ideRuleCount > 0 ? (' Found ' + ideRuleCount + ' IDE rule(s) to import.') : '';
+                hint.textContent = 'Not initialized.' + extra;
+              } else if (synapseRuleCount === 0) {
+                hint.textContent = 'Initialized, but no .synapse rules yet.';
+              } else {
+                hint.textContent = '';
+              }
+            }
+            return;
+          }
+          if (message.command === 'updateTemplatesCatalog') {
+            const d = message.data || {};
+            const list = Array.isArray(d.templates) ? d.templates : [];
+            const el = document.getElementById('templatesList');
+            const status = document.getElementById('templatesStatus');
+            if (!el) return;
+            if (list.length === 0) {
+              el.innerHTML = '<div class="muted">No templates available.</div>';
+              if (status) status.textContent = '';
+              return;
+            }
+
+            const byPack = {};
+            for (const t of list) {
+              const pack = (t && typeof t.pack === 'string' && t.pack.trim()) ? t.pack.trim() : 'Templates';
+              if (!byPack[pack]) byPack[pack] = [];
+              byPack[pack].push(t);
+            }
+
+            const packNames = Object.keys(byPack).sort();
+            el.innerHTML = packNames.map(p => {
+              const items = byPack[p] || [];
+              const rows = items.map(t => {
+                const id = (t && typeof t.id === 'string') ? t.id : '';
+                const title = (t && typeof t.title === 'string') ? t.title : id;
+                const desc = (t && typeof t.description === 'string') ? t.description : '';
+                const safeId = id.replace(/[^a-zA-Z0-9_-]/g, '_');
+                return '<div style="margin-top:6px; padding:6px 8px; border:1px solid var(--vscode-panel-border); border-radius:8px">' +
+                  '<label style="display:flex; gap:10px; align-items:flex-start; cursor:pointer">' +
+                    '<input type="checkbox" class="tplBox" value="' + safeId + '" data-id="' + id + '" style="margin-top:2px" />' +
+                    '<span><div style="font-weight:600">' + title + '</div>' +
+                    (desc ? ('<div class="muted" style="margin-top:2px">' + desc + '</div>') : '') +
+                    '</span>' +
+                  '</label>' +
+                '</div>';
+              }).join('');
+              return '<div style="margin-top:10px">' +
+                '<div style="font-weight:700; margin-top:6px">' + p + '</div>' +
+                rows +
+              '</div>';
+            }).join('');
+
+            if (status) status.textContent = '';
+            return;
+          }
           if (message.command === 'compressionTelemetry') {
             const data = message.data || {};
             const saved = typeof data.savingsPercent === 'number' ? data.savingsPercent : null;
@@ -513,7 +683,11 @@ export class ActionsViewProvider implements vscode.WebviewViewProvider {
             if (d.missingDefense) missing.push('Response defense');
             if (d.missingInjection) missing.push('Prompt injection guardrails');
             const el = document.getElementById('bestPracticesStatus');
-            if (el) el.textContent = missing.length ? ('Missing: ' + missing.join(', ')) : 'Best practices: OK';
+            const ok = missing.length === 0;
+            if (el) {
+              el.textContent = missing.length ? ('Missing: ' + missing.join(', ')) : '';
+              el.style.display = ok ? 'none' : '';
+            }
 
             const actions = document.getElementById('bestPracticesActions');
             const tokenBtn = document.getElementById('bpTokenBtn');
@@ -526,11 +700,27 @@ export class ActionsViewProvider implements vscode.WebviewViewProvider {
             if (injectionBtn) injectionBtn.style.display = d.missingInjection ? '' : 'none';
             const anyMissing = !!(d.missingTokenHygiene || d.missingSafety || d.missingDefense || d.missingInjection);
             if (actions) actions.style.display = anyMissing ? '' : 'none';
+
+            const applyBtn = document.getElementById('btnApplyBestPractices');
+            if (applyBtn) applyBtn.style.display = anyMissing ? '' : 'none';
             return;
           }
         });
 
+        function installSelectedTemplates() {
+          const boxes = Array.from(document.querySelectorAll('.tplBox'));
+          const ids = boxes.filter(b => b && b.checked).map(b => b.getAttribute('data-id')).filter(Boolean);
+          const status = document.getElementById('templatesStatus');
+          if (!ids || ids.length === 0) {
+            if (status) status.textContent = 'Select at least one template.';
+            return;
+          }
+          if (status) status.textContent = 'Installing…';
+          vscode.postMessage({ command: 'installTemplates', ids });
+        }
+
         vscode.postMessage({ command: 'ready' });
+        vscode.postMessage({ command: 'templatesCatalog' });
       </script>
     </body>
     </html>`;
